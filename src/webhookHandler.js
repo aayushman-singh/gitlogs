@@ -94,7 +94,7 @@ async function processCommit(commit, repository, pusher) {
       replyToId = await database.getLastTweetId(repository.full_name);
     }
 
-    console.log('🐦 Posting to Twitter...');
+    console.log('🐦 Posting to X...');
     const tweetId = await twitterClient.postTweet(tweetData, null, replyToId);
 
     if (config.database.enabled) {
@@ -102,7 +102,7 @@ async function processCommit(commit, repository, pusher) {
     }
 
     console.log(`✅ Successfully posted tweet: ${tweetId}`);
-    console.log(`🔗 https://twitter.com/user/status/${tweetId}`);
+    console.log(`🔗 https://x.com/user/status/${tweetId}`);
 
   } catch (error) {
     console.error(`❌ Error processing commit ${commit.id}:`, error.message);

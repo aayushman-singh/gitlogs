@@ -18,7 +18,7 @@ module.exports = {
     // OAuth 1.0a credentials (fallback - API Key = Consumer Key, API Secret = Consumer Secret)
     apiKey: process.env.TWITTER_API_KEY || process.env.TWITTER_CONSUMER_KEY,
     apiSecret: process.env.TWITTER_API_SECRET || process.env.TWITTER_CONSUMER_SECRET,
-    // Access tokens (required for posting tweets - generate from Twitter Developer Portal)
+    // Access tokens (required for posting tweets - generate from X Developer Portal)
     accessToken: process.env.TWITTER_ACCESS_TOKEN,
     accessSecret: process.env.TWITTER_ACCESS_SECRET
   },
