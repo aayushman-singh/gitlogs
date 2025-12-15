@@ -119,7 +119,7 @@ if (config.twitter.refreshToken && config.twitter.clientId && config.twitter.cli
   twitterClient = new Client(authClient);
 } else if (config.twitter.clientId && config.twitter.clientSecret) {
   // OAuth 2.0 without refresh token (static access token from developer portal)
-  // Provide a dummy refresh token to prevent SDK errors, but it won't work for actual refresh
+  // Try to use proxy for refresh if refresh token becomes available
   const callbackUrl = process.env.OAUTH_CALLBACK_URL || `http://localhost:${config.server.port}/callback`;
   
   const authClient = new auth.OAuth2User({
@@ -129,24 +129,69 @@ if (config.twitter.refreshToken && config.twitter.clientId && config.twitter.cli
     scopes: ['tweet.read', 'tweet.write', 'users.read', 'offline.access'],
   });
 
-  // Set token with a dummy refresh token to prevent SDK errors
-  // Note: Token refresh won't work - user will need to regenerate token when it expires
+  // Set token - check if refresh token exists in config, environment, or token object
+  // Try to get refresh token from multiple sources
+  const refreshToken = config.twitter.refreshToken || 
+                       process.env.TWITTER_REFRESH_TOKEN || 
+                       authClient.token?.refresh_token || 
+                       null;
+  
   authClient.token = {
     access_token: config.twitter.accessToken,
     token_type: 'Bearer',
-    refresh_token: 'dummy_refresh_token', // Dummy to prevent SDK error
+    refresh_token: refreshToken || 'dummy_refresh_token',
   };
 
-  // Override refreshAccessToken to provide helpful error
+  // Override refreshAccessToken to use proxy if refresh token is available
   const originalRefresh = authClient.refreshAccessToken.bind(authClient);
   authClient.refreshAccessToken = async () => {
-    throw new Error(
-      'Access token expired and refresh token not available.\n' +
-      'Please regenerate your access token from https://developer.x.com\n' +
-      'Or complete the OAuth flow to obtain a refresh token.'
-    );
+    // Check if we have a valid refresh token (not dummy)
+    // Also re-check environment in case it was set after initialization
+    const currentRefreshToken = config.twitter.refreshToken || 
+                                process.env.TWITTER_REFRESH_TOKEN || 
+                                authClient.token.refresh_token;
+    
+    const hasValidRefreshToken = currentRefreshToken && 
+                                 currentRefreshToken !== 'dummy_refresh_token';
+    
+    if (hasValidRefreshToken) {
+      // Update token with current refresh token if we found one
+      if (currentRefreshToken !== authClient.token.refresh_token) {
+        authClient.token.refresh_token = currentRefreshToken;
+      }
+      
+      if (config.twitter.proxyUrl) {
+        try {
+          console.log('🔄 Refreshing access token using proxy...');
+          return await refreshTokenWithProxy(authClient, config.twitter.proxyUrl);
+        } catch (error) {
+          console.error('❌ Proxy refresh failed, trying original method:', error.message);
+          // Fallback to original refresh method if proxy fails
+          try {
+            return await originalRefresh();
+          } catch (fallbackError) {
+            throw new Error(`Token refresh failed: ${error.message}. Fallback also failed: ${fallbackError.message}`);
+          }
+        }
+      } else {
+        // No proxy configured, use original method
+        try {
+          return await originalRefresh();
+        } catch (error) {
+          throw new Error(`Token refresh failed: ${error.message}`);
+        }
+      }
+    } else {
+      throw new Error(
+        'Access token expired and refresh token not available.\n' +
+        'Please set TWITTER_REFRESH_TOKEN environment variable with your refresh token.\n' +
+        'Or regenerate your access token from https://developer.x.com\n' +
+        'Or complete the OAuth flow to obtain a refresh token.'
+      );
+    }
   };
 
+  authClientRef = authClient; // Store reference for use in post actions
   twitterClient = new Client(authClient);
 } else {
   throw new Error(
@@ -188,10 +233,11 @@ async function postTweet(text, imageBuffer = null, replyToId = null) {
   } catch (error) {
     console.error('❌ Error posting tweet:', error);
     
-    // Check if error is due to expired token (401 Unauthorized)
-    if (error.status === 401 || (error.message && error.message.includes('Unauthorized'))) {
-      // Try to refresh token and retry
-      if (config.twitter.refreshToken && config.twitter.clientId && config.twitter.clientSecret && authClientRef) {
+    // Check if error is due to expired token (401 Unauthorized) or refresh token error
+    if (error.status === 401 || 
+        (error.message && (error.message.includes('Unauthorized') || error.message.includes('expired')))) {
+      // Try to refresh token and retry if we have auth client
+      if (authClientRef && config.twitter.clientId && config.twitter.clientSecret) {
         try {
           console.log('🔄 Access token expired, attempting refresh...');
           await authClientRef.refreshAccessToken();
@@ -204,6 +250,7 @@ async function postTweet(text, imageBuffer = null, replyToId = null) {
           }
         } catch (refreshError) {
           console.error('❌ Failed to refresh token:', refreshError.message);
+          // Don't throw here - let the original error propagate
           throw new Error(`Token refresh failed: ${refreshError.message}`);
         }
       }
