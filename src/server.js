@@ -4,6 +4,17 @@ const webhookHandler = require('./webhookHandler');
 
 const app = express();
 
+// Capture raw body for webhook signature verification (must be before parsing)
+app.use('/webhook/github', express.raw({ type: '*/*' }), (req, res, next) => {
+  req.rawBody = req.body.toString('utf8');
+  next();
+});
+
+// Parse form-encoded and JSON for webhook route
+app.use('/webhook/github', express.urlencoded({ extended: false }));
+app.use('/webhook/github', express.json());
+
+// Parse JSON for other routes
 app.use(express.json());
 
 app.get('/', (req, res) => {

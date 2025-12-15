@@ -42,6 +42,26 @@ function isRepoAllowed(repoFullName) {
   return config.github.allowedRepos.includes(repoFullName);
 }
 
+function isMergeCommit(commit) {
+  // Check if commit message indicates a merge
+  const message = commit.message || '';
+  const mergePatterns = [
+    /^Merge branch/i,
+    /^Merge pull request/i,
+    /^Merge .+ into/i,
+    /^Merged .+ into/i
+  ];
+  
+  // Check message patterns
+  if (mergePatterns.some(pattern => pattern.test(message))) {
+    return true;
+  }
+  
+  // Check if commit has multiple parents (merge commit)
+  // Note: GitHub webhook doesn't always include parent info, so we rely on message
+  return false;
+}
+
 async function processCommit(commit, repository, pusher) {
   try {
     console.log(`📝 Processing commit: ${commit.id.substring(0, 7)}`);
@@ -93,11 +113,36 @@ async function handleWebhook(req, res) {
   try {
     const signature = req.headers['x-hub-signature-256'];
     const event = req.headers['x-github-event'];
+    const contentType = req.headers['content-type'] || '';
 
-    const payload = JSON.stringify(req.body);
-    if (!verifyGitHubSignature(payload, signature)) {
+    // Get raw body for signature verification (as sent by GitHub)
+    let rawBody = req.rawBody;
+    if (Buffer.isBuffer(rawBody)) {
+      rawBody = rawBody.toString('utf8');
+    }
+
+    // Verify signature using raw body (GitHub signs the raw request body)
+    if (!verifyGitHubSignature(rawBody, signature)) {
       console.error('❌ Invalid webhook signature');
       return res.status(401).send('Invalid signature');
+    }
+
+    // Parse the payload based on content type
+    let body;
+    if (contentType.includes('application/x-www-form-urlencoded')) {
+      // Form-encoded: GitHub sends payload=<json_string>
+      // req.body should already be parsed by express.urlencoded
+      if (req.body && req.body.payload) {
+        body = JSON.parse(req.body.payload);
+      } else {
+        // Fallback: parse manually
+        const querystring = require('querystring');
+        const parsed = querystring.parse(rawBody);
+        body = JSON.parse(parsed.payload);
+      }
+    } else {
+      // JSON payload: req.body should already be parsed by express.json
+      body = req.body;
     }
 
     if (event !== 'push') {
@@ -105,7 +150,7 @@ async function handleWebhook(req, res) {
       return res.status(200).send('Event ignored');
     }
 
-    const { commits, repository, pusher, ref } = req.body;
+    const { commits, repository, pusher, ref } = body;
 
     console.log(`\n🔔 Push event received`);
     console.log(`📦 Repository: ${repository.full_name}`);
@@ -117,7 +162,12 @@ async function handleWebhook(req, res) {
       return res.status(200).send('Repository not allowed');
     }
 
-    for (const commit of commits) {
+    // Filter out merge commits and process individual commits
+    const nonMergeCommits = commits.filter(commit => !isMergeCommit(commit));
+    
+    console.log(`📝 Processing ${nonMergeCommits.length} non-merge commits (skipped ${commits.length - nonMergeCommits.length} merge commits)`);
+
+    for (const commit of nonMergeCommits) {
       await processCommit(commit, repository, pusher);
     }
 

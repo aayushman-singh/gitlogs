@@ -200,6 +200,283 @@ Then: `DRY_RUN=true npm start`
 
 ## Deployment
 
+### Ubuntu with systemd and Nginx
+
+Complete setup guide for Ubuntu server with systemd service and Nginx reverse proxy.
+
+#### Step 1: Install Node.js and Dependencies
+
+```bash
+# Update system
+sudo apt-get update
+sudo apt-get upgrade -y
+
+# Install Node.js 20.x
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Install build tools (needed for better-sqlite3)
+sudo apt-get install -y build-essential python3
+
+# Install Git
+sudo apt-get install -y git
+
+# Verify installations
+node --version
+npm --version
+```
+
+#### Step 2: Clone and Setup Bot
+
+```bash
+# Clone repository
+git clone https://github.com/yourusername/git-twitter-bot.git
+cd git-twitter-bot
+
+# Install dependencies
+npm install --production
+
+# Copy and configure environment
+cp .env.example .env
+nano .env  # Add your credentials
+```
+
+#### Step 3: Create systemd Service
+
+Create service file:
+
+```bash
+sudo nano /etc/systemd/system/git-twitter-bot.service
+```
+
+Add the following content:
+
+```ini
+[Unit]
+Description=Git Twitter Bot
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/git-twitter-bot
+Environment="NODE_ENV=production"
+Environment="PORT=3000"
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=git-twitter-bot
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**Important:** Replace `/home/ubuntu/git-twitter-bot` with your actual path.
+
+Enable and start the service:
+
+```bash
+# Reload systemd
+sudo systemctl daemon-reload
+
+# Enable service to start on boot
+sudo systemctl enable git-twitter-bot
+
+# Start the service
+sudo systemctl start git-twitter-bot
+
+# Check status
+sudo systemctl status git-twitter-bot
+
+# View logs
+sudo journalctl -u git-twitter-bot -f
+```
+
+**Useful commands:**
+```bash
+sudo systemctl start git-twitter-bot      # Start
+sudo systemctl stop git-twitter-bot       # Stop
+sudo systemctl restart git-twitter-bot    # Restart
+sudo systemctl status git-twitter-bot     # Status
+sudo journalctl -u git-twitter-bot -n 50  # Last 50 log lines
+```
+
+#### Step 4: Install and Configure Nginx
+
+```bash
+# Install Nginx
+sudo apt-get install -y nginx
+
+# Create Nginx configuration
+sudo nano /etc/nginx/sites-available/git-twitter-bot
+```
+
+Add the following configuration:
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;  # Replace with your domain or IP
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Increase timeouts for webhook processing
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+}
+```
+
+Enable the site:
+
+```bash
+# Create symlink
+sudo ln -s /etc/nginx/sites-available/git-twitter-bot /etc/nginx/sites-enabled/
+
+# Remove default site (optional)
+sudo rm /etc/nginx/sites-enabled/default
+
+# Test configuration
+sudo nginx -t
+
+# Start and enable Nginx
+sudo systemctl start nginx
+sudo systemctl enable nginx
+
+# Check status
+sudo systemctl status nginx
+```
+
+#### Step 5: Set Up SSL with Let's Encrypt
+
+```bash
+# Install Certbot
+sudo apt-get install -y certbot python3-certbot-nginx
+
+# Get SSL certificate (replace with your domain)
+sudo certbot --nginx -d your-domain.com
+
+# Certbot will:
+# - Obtain certificate
+# - Configure Nginx automatically
+# - Set up auto-renewal
+```
+
+**Auto-renewal is set up automatically.** Test renewal:
+
+```bash
+sudo certbot renew --dry-run
+```
+
+#### Step 6: Configure Firewall
+
+```bash
+# Allow SSH, HTTP, and HTTPS
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+
+# Enable firewall
+sudo ufw enable
+
+# Check status
+sudo ufw status
+```
+
+#### Step 7: Verify Setup
+
+1. **Check service is running:**
+   ```bash
+   sudo systemctl status git-twitter-bot
+   ```
+
+2. **Check Nginx is running:**
+   ```bash
+   sudo systemctl status nginx
+   ```
+
+3. **Test endpoint:**
+   ```bash
+   curl http://localhost:3000
+   # Should return: {"status":"ok","message":"Git→Twitter Bot is running"}
+   
+   curl http://your-domain.com
+   # Should return the same
+   ```
+
+4. **Check logs:**
+   ```bash
+   # Bot logs
+   sudo journalctl -u git-twitter-bot -f
+   
+   # Nginx logs
+   sudo tail -f /var/log/nginx/access.log
+   sudo tail -f /var/log/nginx/error.log
+   ```
+
+#### Step 8: Configure GitHub Webhook
+
+Use your domain in GitHub webhook settings:
+- **Payload URL:** `https://your-domain.com/webhook/github`
+- **Content type:** `application/json`
+- **Secret:** Your `WEBHOOK_SECRET` from `.env`
+- **Events:** Just the push event
+
+#### Troubleshooting
+
+**Service won't start:**
+```bash
+# Check logs
+sudo journalctl -u git-twitter-bot -n 50
+
+# Common issues:
+# - Wrong path in service file
+# - Missing .env file
+# - Port already in use
+# - Permission issues
+```
+
+**Nginx 502 Bad Gateway:**
+```bash
+# Check if bot service is running
+sudo systemctl status git-twitter-bot
+
+# Check if port 3000 is listening
+sudo netstat -tlnp | grep 3000
+
+# Check Nginx error logs
+sudo tail -f /var/log/nginx/error.log
+```
+
+**Permission issues:**
+```bash
+# Ensure user has access to the directory
+sudo chown -R ubuntu:ubuntu /home/ubuntu/git-twitter-bot
+
+# Check file permissions
+ls -la /home/ubuntu/git-twitter-bot
+```
+
+**Update bot code:**
+```bash
+cd /home/ubuntu/git-twitter-bot
+git pull
+npm install --production
+sudo systemctl restart git-twitter-bot
+```
+
 ### AWS EC2 t4g.micro
 
 **Specs:** 2 vCPUs, 1 GB RAM - Perfect for this bot (~$7-8/month or free tier)
