@@ -128,21 +128,32 @@ async function handleWebhook(req, res) {
     }
 
     // Parse the payload based on content type
+    // Note: We parse from rawBody because express.raw() consumes the stream,
+    // preventing express.json() from parsing it properly
     let body;
     if (contentType.includes('application/x-www-form-urlencoded')) {
       // Form-encoded: GitHub sends payload=<json_string>
-      // req.body should already be parsed by express.urlencoded
-      if (req.body && req.body.payload) {
-        body = JSON.parse(req.body.payload);
-      } else {
-        // Fallback: parse manually
-        const querystring = require('querystring');
-        const parsed = querystring.parse(rawBody);
-        body = JSON.parse(parsed.payload);
+      const querystring = require('querystring');
+      const parsed = querystring.parse(rawBody);
+      if (!parsed.payload) {
+        console.error('❌ Missing payload in form-encoded webhook');
+        return res.status(400).send('Missing payload');
       }
+      body = JSON.parse(parsed.payload);
     } else {
-      // JSON payload: req.body should already be parsed by express.json
-      body = req.body;
+      // JSON payload: Parse directly from rawBody since express.raw() consumed the stream
+      try {
+        body = JSON.parse(rawBody);
+      } catch (parseError) {
+        console.error('❌ Failed to parse JSON payload:', parseError.message);
+        console.error('Raw body preview:', rawBody.substring(0, 200));
+        return res.status(400).send('Invalid JSON payload');
+      }
+    }
+
+    if (!body || typeof body !== 'object') {
+      console.error('❌ Invalid body structure:', typeof body);
+      return res.status(400).send('Invalid body structure');
     }
 
     if (event !== 'push') {
@@ -153,8 +164,25 @@ async function handleWebhook(req, res) {
     const { commits, repository, pusher, ref } = body;
 
     console.log(`\n🔔 Push event received`);
+
+    // Validate required fields
+    if (!repository) {
+      console.error('❌ Missing repository in webhook payload');
+      return res.status(400).send('Missing repository');
+    }
+
+    if (!repository.full_name) {
+      console.error('❌ Missing repository.full_name in webhook payload');
+      return res.status(400).send('Missing repository.full_name');
+    }
+
+    if (!commits || !Array.isArray(commits)) {
+      console.error('❌ Missing or invalid commits array in webhook payload');
+      return res.status(400).send('Missing or invalid commits');
+    }
+
     console.log(`📦 Repository: ${repository.full_name}`);
-    console.log(`🌿 Branch: ${ref}`);
+    console.log(`🌿 Branch: ${ref || 'unknown'}`);
     console.log(`📊 Commits: ${commits.length}`);
 
     if (!isRepoAllowed(repository.full_name)) {
