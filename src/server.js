@@ -25,6 +25,21 @@ app.get('/', (req, res) => {
   });
 });
 
+// Twitter OAuth callback endpoint (for token generation if needed)
+app.get('/callback', (req, res) => {
+  res.send(`
+    <html>
+      <head><title>Twitter OAuth Callback</title></head>
+      <body>
+        <h1>Twitter OAuth Callback</h1>
+        <p>This endpoint is used for Twitter OAuth authentication.</p>
+        <p>If you're seeing this, the callback URL is configured correctly.</p>
+        <p>Check the server logs for OAuth token information.</p>
+      </body>
+    </html>
+  `);
+});
+
 app.post('/webhook/github', webhookHandler.handleWebhook);
 
 app.use((req, res) => {

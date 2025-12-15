@@ -29,6 +29,17 @@ async function postTweet(text, imageBuffer = null, replyToId = null) {
     console.error('❌ Error posting tweet:', error);
     
     if (error.code === 403) {
+      const errorDetail = error.data?.detail || error.message;
+      if (errorDetail && errorDetail.includes('oauth1 app permissions')) {
+        throw new Error(
+          'Twitter API permissions error: Your app needs "Read and Write" permissions.\n' +
+          '1. Go to https://developer.twitter.com/en/portal/dashboard\n' +
+          '2. Select your app → Settings → User authentication settings\n' +
+          '3. Change App permissions to "Read and Write"\n' +
+          '4. Regenerate your Access Token and Access Secret\n' +
+          '5. Update your environment variables with the new tokens'
+        );
+      }
       throw new Error('Twitter API authentication failed. Check your credentials.');
     }
     if (error.code === 429) {
