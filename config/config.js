@@ -20,7 +20,11 @@ module.exports = {
     apiSecret: process.env.TWITTER_API_SECRET || process.env.TWITTER_CONSUMER_SECRET,
     // Access tokens (required for posting tweets - generate from X Developer Portal)
     accessToken: process.env.TWITTER_ACCESS_TOKEN,
-    accessSecret: process.env.TWITTER_ACCESS_SECRET
+    accessSecret: process.env.TWITTER_ACCESS_SECRET,
+    // Bearer token (for app-only auth, but can be used if available)
+    bearerToken: process.env.TWITTER_BEARER_TOKEN,
+    // Refresh token (optional but recommended for OAuth 2.0 - obtained during OAuth flow)
+    refreshToken: process.env.TWITTER_REFRESH_TOKEN
   },
   database: {
     path: process.env.DATABASE_PATH || './tweets.db',
