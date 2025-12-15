@@ -1,5 +1,7 @@
 const { Client, auth } = require('twitter-api-sdk');
 const config = require('../config/config');
+const https = require('https');
+const http = require('http');
 
 /**
  * X API v2 Endpoint Mapping:
@@ -12,36 +14,74 @@ const config = require('../config/config');
 
 // Initialize X API client
 let twitterClient;
+let authClientRef; // Store reference to auth client for token refresh
 
-// Try bearer token first if available (simpler, no refresh needed)
-if (config.twitter.bearerToken) {
-  // Use bearer token authentication (app-only or user context bearer token)
-  if (auth.OAuth2BearerToken) {
-    const authClient = new auth.OAuth2BearerToken(config.twitter.bearerToken);
-    twitterClient = new Client(authClient);
-  } else {
-    // Fallback: Use bearer token as access token in OAuth2User
-    if (!config.twitter.clientId || !config.twitter.clientSecret) {
-      throw new Error('OAuth 2.0 credentials (OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET) required when using bearer token');
-    }
-    const callbackUrl = process.env.OAUTH_CALLBACK_URL || `http://localhost:${config.server.port}/callback`;
-    const authClient = new auth.OAuth2User({
-      client_id: config.twitter.clientId,
-      client_secret: config.twitter.clientSecret,
-      callback: callbackUrl,
-      scopes: ['tweet.read', 'tweet.write', 'users.read'],
-    });
-    authClient.token = {
-      access_token: config.twitter.bearerToken,
-      token_type: 'Bearer',
-      refresh_token: 'dummy_refresh_token',
+if (!config.twitter.accessToken) {
+  throw new Error('X API access token (TWITTER_ACCESS_TOKEN) is required');
+}
+
+// Helper function to refresh access token using proxy
+async function refreshTokenWithProxy(authClient, proxyUrl) {
+  const tokenEndpoint = 'https://api.twitter.com/2/oauth2/token';
+  const proxiedUrl = `${proxyUrl}${encodeURIComponent(tokenEndpoint)}`;
+  
+  // Twitter OAuth 2.0 requires Basic Auth with client_id:client_secret
+  const credentials = Buffer.from(`${authClient.client_id}:${authClient.client_secret}`).toString('base64');
+  
+  const params = new URLSearchParams({
+    refresh_token: authClient.token.refresh_token,
+    grant_type: 'refresh_token',
+  });
+
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(proxiedUrl);
+    const options = {
+      hostname: urlObj.hostname,
+      port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
+      path: urlObj.pathname + urlObj.search,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(params.toString()),
+        'Authorization': `Basic ${credentials}`,
+      },
     };
-    twitterClient = new Client(authClient);
-  }
-} else if (!config.twitter.accessToken) {
-  throw new Error('X API access token (TWITTER_ACCESS_TOKEN) or bearer token (TWITTER_BEARER_TOKEN) is required');
-} else if (config.twitter.refreshToken && config.twitter.clientId && config.twitter.clientSecret) {
-  // Check if we have refresh token support (OAuth 2.0 flow)
+
+    const req = (urlObj.protocol === 'https:' ? https : http).request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      res.on('end', () => {
+        try {
+          const response = JSON.parse(data);
+          if (res.statusCode === 200 && response.access_token) {
+            authClient.token = {
+              access_token: response.access_token,
+              token_type: response.token_type || 'Bearer',
+              refresh_token: response.refresh_token || authClient.token.refresh_token,
+            };
+            resolve(authClient.token);
+          } else {
+            reject(new Error(`Token refresh failed: ${data}`));
+          }
+        } catch (error) {
+          reject(new Error(`Failed to parse token response: ${error.message}`));
+        }
+      });
+    });
+
+    req.on('error', (error) => {
+      reject(new Error(`Token refresh request failed: ${error.message}`));
+    });
+
+    req.write(params.toString());
+    req.end();
+  });
+}
+
+// Check if we have refresh token support (OAuth 2.0 flow)
+if (config.twitter.refreshToken && config.twitter.clientId && config.twitter.clientSecret) {
   // OAuth 2.0 with refresh token support (full OAuth flow)
   const callbackUrl = process.env.OAUTH_CALLBACK_URL || `http://localhost:${config.server.port}/callback`;
   
@@ -58,6 +98,24 @@ if (config.twitter.bearerToken) {
     refresh_token: config.twitter.refreshToken,
   };
 
+  // Override refreshAccessToken to use proxy
+  const originalRefresh = authClient.refreshAccessToken.bind(authClient);
+  authClient.refreshAccessToken = async () => {
+    try {
+      console.log('🔄 Refreshing access token using proxy...');
+      return await refreshTokenWithProxy(authClient, config.twitter.proxyUrl);
+    } catch (error) {
+      console.error('❌ Proxy refresh failed, trying original method:', error.message);
+      // Fallback to original refresh method if proxy fails
+      try {
+        return await originalRefresh();
+      } catch (fallbackError) {
+        throw new Error(`Token refresh failed: ${error.message}. Fallback also failed: ${fallbackError.message}`);
+      }
+    }
+  };
+
+  authClientRef = authClient; // Store reference for use in post actions
   twitterClient = new Client(authClient);
 } else if (config.twitter.clientId && config.twitter.clientSecret) {
   // OAuth 2.0 without refresh token (static access token from developer portal)
@@ -129,6 +187,27 @@ async function postTweet(text, imageBuffer = null, replyToId = null) {
 
   } catch (error) {
     console.error('❌ Error posting tweet:', error);
+    
+    // Check if error is due to expired token (401 Unauthorized)
+    if (error.status === 401 || (error.message && error.message.includes('Unauthorized'))) {
+      // Try to refresh token and retry
+      if (config.twitter.refreshToken && config.twitter.clientId && config.twitter.clientSecret && authClientRef) {
+        try {
+          console.log('🔄 Access token expired, attempting refresh...');
+          await authClientRef.refreshAccessToken();
+          console.log('✅ Token refreshed, retrying tweet post...');
+          // Retry the tweet post after refresh
+          const retryResponse = await twitterClient.tweets.createTweet({ requestBody: tweetPayload });
+          if (retryResponse.data && retryResponse.data.id) {
+            console.log(`✅ Tweet posted after token refresh: ${retryResponse.data.id}`);
+            return retryResponse.data.id;
+          }
+        } catch (refreshError) {
+          console.error('❌ Failed to refresh token:', refreshError.message);
+          throw new Error(`Token refresh failed: ${refreshError.message}`);
+        }
+      }
+    }
     
     if (error.status === 403) {
       const errorDetail = error.detail || error.message;
