@@ -13,39 +13,29 @@ const config = require('../config/config');
 // Initialize X API client
 let twitterClient;
 
-if (config.twitter.clientId && config.twitter.clientSecret) {
-  // OAuth 2.0 with user context
-  const callbackUrl = process.env.OAUTH_CALLBACK_URL || `http://localhost:${config.server.port}/callback`;
-  
-  const authClient = new auth.OAuth2User({
-    client_id: config.twitter.clientId,
-    client_secret: config.twitter.clientSecret,
-    callback: callbackUrl,
-    scopes: ['tweet.read', 'tweet.write', 'users.read', 'offline.access'],
-  });
-
-  // If we have an access token, set it
-  if (config.twitter.accessToken) {
-    authClient.token = {
-      access_token: config.twitter.accessToken,
-      token_type: 'Bearer',
-    };
-  }
-
-  twitterClient = new Client(authClient);
-} else if (config.twitter.apiKey && config.twitter.apiSecret && config.twitter.accessToken && config.twitter.accessSecret) {
-  // OAuth 1.0a (fallback)
-  const authClient = new auth.OAuth1User({
-    consumer_key: config.twitter.apiKey,
-    consumer_secret: config.twitter.apiSecret,
-    access_token: config.twitter.accessToken,
-    access_token_secret: config.twitter.accessSecret,
-  });
-
-  twitterClient = new Client(authClient);
-} else {
-  throw new Error('X API credentials not properly configured. Need either OAuth 1.0a (API Key/Secret + Access Token/Secret) or OAuth 2.0 (Client ID/Secret + Access Token)');
+if (!config.twitter.clientId || !config.twitter.clientSecret) {
+  throw new Error('X API credentials not properly configured. Need OAuth 2.0 credentials (OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET)');
 }
+
+// OAuth 2.0 with user context
+const callbackUrl = process.env.OAUTH_CALLBACK_URL || `http://localhost:${config.server.port}/callback`;
+
+const authClient = new auth.OAuth2User({
+  client_id: config.twitter.clientId,
+  client_secret: config.twitter.clientSecret,
+  callback: callbackUrl,
+  scopes: ['tweet.read', 'tweet.write', 'users.read', 'offline.access'],
+});
+
+// If we have an access token, set it
+if (config.twitter.accessToken) {
+  authClient.token = {
+    access_token: config.twitter.accessToken,
+    token_type: 'Bearer',
+  };
+}
+
+twitterClient = new Client(authClient);
 
 /**
  * Post a tweet using X API v2 Manage Posts endpoint
