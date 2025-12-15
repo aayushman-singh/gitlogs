@@ -2,17 +2,10 @@ const express = require('express');
 const config = require('../config/config');
 const webhookHandler = require('./webhookHandler');
 
-/**
- * Main Express server
- * Receives GitHub webhook events and processes commits
- */
-
 const app = express();
 
-// Middleware to parse JSON payloads
 app.use(express.json());
 
-// Health check endpoint
 app.get('/', (req, res) => {
   res.json({
     status: 'ok',
@@ -21,16 +14,12 @@ app.get('/', (req, res) => {
   });
 });
 
-// GitHub webhook endpoint
-// This is where GitHub will POST commit events
 app.post('/webhook/github', webhookHandler.handleWebhook);
 
-// 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
 });
 
-// Global error handler
 app.use((err, req, res, next) => {
   console.error('Server error:', err);
   res.status(500).json({ 
@@ -39,7 +28,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
 const PORT = config.server.port;
 app.listen(PORT, () => {
   console.log(`🚀 Git→Twitter Bot listening on port ${PORT}`);
