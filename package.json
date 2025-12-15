@@ -8,7 +8,8 @@
     "dev": "nodemon src/server.js",
     "test:local": "node test-local.js",
     "test:webhook": "node test-webhook.js",
-    "test:gemini": "node test-gemini.js"
+    "test:gemini": "node test-gemini.js",
+    "get-refresh-token": "node scripts/get-refresh-token.js"
   },
   "dependencies": {
     "express": "^4.18.2",
