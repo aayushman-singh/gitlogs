@@ -1,12 +1,26 @@
 const { TwitterApi } = require('twitter-api-v2');
 const config = require('../config/config');
 
-const client = new TwitterApi({
-  appKey: config.twitter.apiKey,
-  appSecret: config.twitter.apiSecret,
-  accessToken: config.twitter.accessToken,
-  accessSecret: config.twitter.accessSecret,
-});
+// Initialize Twitter client - prefer OAuth 2.0 if client credentials are provided, otherwise use OAuth 1.0a
+let client;
+if (config.twitter.clientId && config.twitter.clientSecret && config.twitter.accessToken) {
+  // OAuth 2.0 with user context (requires access token generated via OAuth flow)
+  client = new TwitterApi({
+    clientId: config.twitter.clientId,
+    clientSecret: config.twitter.clientSecret,
+    accessToken: config.twitter.accessToken,
+  });
+} else if (config.twitter.apiKey && config.twitter.apiSecret && config.twitter.accessToken && config.twitter.accessSecret) {
+  // OAuth 1.0a (traditional method)
+  client = new TwitterApi({
+    appKey: config.twitter.apiKey,
+    appSecret: config.twitter.apiSecret,
+    accessToken: config.twitter.accessToken,
+    accessSecret: config.twitter.accessSecret,
+  });
+} else {
+  throw new Error('Twitter credentials not properly configured. Need either OAuth 1.0a (API Key/Secret + Access Token/Secret) or OAuth 2.0 (Client ID/Secret + Access Token)');
+}
 
 const twitterClient = client.readWrite;
 
