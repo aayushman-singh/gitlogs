@@ -186,20 +186,22 @@ async function postTweet(text, imageBuffer = null, replyToId = null) {
     throw new Error(`Tweet text is too long: ${twitterLength} Twitter characters (max 280). Raw length: ${text.length} characters`);
   }
 
-  try {
-    const tweetPayload = {
-      text: text,
+  // Build tweet payload (outside try block so it's accessible in catch)
+  const tweetPayload = {
+    text: text,
+  };
+
+  if (replyToId) {
+    tweetPayload.reply = {
+      in_reply_to_tweet_id: replyToId
     };
+    console.log(`🧵 Threading to tweet: ${replyToId}`);
+  }
 
-    if (replyToId) {
-      tweetPayload.reply = {
-        in_reply_to_tweet_id: replyToId
-      };
-      console.log(`🧵 Threading to tweet: ${replyToId}`);
-    }
-
+  try {
     // X API v2: POST /2/tweets - Create Tweet
-    const response = await twitterClient.tweets.createTweet({ requestBody: tweetPayload });
+    // Pass the payload directly - the SDK handles requestBody internally
+    const response = await twitterClient.tweets.createTweet(tweetPayload);
     
     if (!response.data || !response.data.id) {
       throw new Error('Failed to get tweet ID from response');
@@ -246,7 +248,7 @@ async function postTweet(text, imageBuffer = null, replyToId = null) {
           await authClientRef.refreshAccessToken();
           console.log('✅ Token refreshed, retrying tweet post...');
           // Retry the tweet post after refresh
-          const retryResponse = await twitterClient.tweets.createTweet({ requestBody: tweetPayload });
+          const retryResponse = await twitterClient.tweets.createTweet(tweetPayload);
           if (retryResponse.data && retryResponse.data.id) {
             console.log(`✅ Tweet posted after token refresh: ${retryResponse.data.id}`);
             return retryResponse.data.id;
