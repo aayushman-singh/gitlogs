@@ -19,7 +19,7 @@ const http = require('http');
 
 // Constants matching Python implementation
 const OAUTH_PORT = process.env.OAUTH_PORT || 5001;
-const REDIRECT_URI = process.env.OAUTH_CALLBACK_URL || `http://localhost:${OAUTH_PORT}/oauth/callback`;
+const REDIRECT_URI = process.env.OAUTH_CALLBACK_URL || `http://localhost:${OAUTH_PORT}/callback`;
 const AUTH_URL = 'https://twitter.com/i/oauth2/authorize';
 const TOKEN_URL = 'https://api.x.com/2/oauth2/token';
 const SCOPES = ['tweet.read', 'users.read', 'tweet.write', 'offline.access'];

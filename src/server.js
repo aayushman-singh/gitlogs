@@ -59,8 +59,8 @@ app.get('/oauth', async (req, res) => {
 });
 
 // OAuth 2.0 callback endpoint with PKCE
-// Similar to Python auth_callback route
-app.get('/oauth/callback', async (req, res) => {
+// Handles both /callback and /oauth/callback for flexibility
+async function handleOAuthCallback(req, res) {
   const { code, error, error_description, state } = req.query;
   
   if (error) {
@@ -134,7 +134,11 @@ app.get('/oauth/callback', async (req, res) => {
       </html>
     `);
   }
-});
+}
+
+// Register callback handler for both routes
+app.get('/callback', handleOAuthCallback);
+app.get('/oauth/callback', handleOAuthCallback);
 
 app.post('/webhook/github', webhookHandler.handleWebhook);
 
