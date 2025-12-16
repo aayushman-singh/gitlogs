@@ -236,7 +236,12 @@ class OAuthHandler {
             if (stored) {
               console.log('✅ Tokens stored successfully');
             } else {
-              console.error('❌ Failed to store tokens in database. Make sure ENABLE_THREADING=true in your .env file.');
+              console.error('❌ Failed to store tokens in database.');
+              console.error('   Database may not be initialized. Check server logs for database initialization errors.');
+              console.error('   Common causes:');
+              console.error('   - better-sqlite3 native bindings missing (run: npm rebuild better-sqlite3)');
+              console.error('   - Database file permissions issue');
+              console.error('   - Database path is invalid');
             }
             resolve(token);
           } catch (error) {

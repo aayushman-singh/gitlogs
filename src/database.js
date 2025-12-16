@@ -106,7 +106,10 @@ async function getTweetsForRepo(repoName) {
 }
 
 function storeOAuthToken(token) {
-  if (!db) return false;
+  if (!db) {
+    console.error('❌ Cannot store OAuth token: Database not initialized');
+    return false;
+  }
 
   try {
     // Delete old tokens
