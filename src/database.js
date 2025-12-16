@@ -1,11 +1,31 @@
-const Database = require('better-sqlite3');
-const config = require('../config/config');
-
+let Database;
 let db = null;
+
+// Try to load better-sqlite3, handle gracefully if it fails
+try {
+  Database = require('better-sqlite3');
+} catch (error) {
+  console.error('❌ Failed to load better-sqlite3:', error.message);
+  console.error('   This usually means native bindings are missing.');
+  console.error('   Run: npm rebuild better-sqlite3');
+  console.error('   Or: npm install (to rebuild all native modules)');
+  Database = null;
+}
+
+const config = require('../config/config');
 
 function initDatabase() {
   // Database is always enabled for OAuth token storage
   // ENABLE_THREADING only controls tweet threading features
+  
+  if (!Database) {
+    console.error('❌ Cannot initialize database: better-sqlite3 module not loaded');
+    console.error('   Database features (OAuth token storage) will not work.');
+    console.error('   Please fix the better-sqlite3 installation issue.');
+    db = null;
+    return;
+  }
+  
   try {
     db = new Database(config.database.path);
     
@@ -41,7 +61,8 @@ function initDatabase() {
       console.log('ℹ️  Threading disabled - tweet threading not available');
     }
   } catch (error) {
-    console.error('❌ Database initialization failed:', error);
+    console.error('❌ Database initialization failed:', error.message);
+    console.error('   Error details:', error);
     db = null;
   }
 }
