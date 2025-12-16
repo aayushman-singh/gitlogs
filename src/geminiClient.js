@@ -56,17 +56,17 @@ Task: Generate a "today's log" style entry that:
 4. Mentions implementation patterns, design decisions, and how things work
 5. Uses technical jargon naturally (e.g., "factory pattern", "OTP style", "autowatches", "sliding window")
 6. Explains the "why" and "how" behind the implementation
-7. Keep it concise but informative (aim for 2-5 bullet points)
+7. Keep it concise but informative (aim for 2-3 bullet points, maximum 150 characters total)
 8. Write in first person
 9. Be specific about technical concepts and patterns used without making it lengthy
+10. CRITICAL: The entire output must be 150 characters or less (including "today's log :" and all bullet points). This is for a tweet, so brevity is essential.
 
-Style Example:
+Style Example (short version):
 today's log : 
-- implemented hierarchical relationships (parent-child) between actors. parent owns child's lifecycle, so a parent on dying, terminates child as well. the parent autowatches the child to implement this.
-- wrote supervision strategies. there are three : on panic, either the actor stops, restarts or escalates the panic to parent.
-- the restart uses a tracker for a sliding window approach (max n restarts in m seconds)
+- implemented hierarchical actor relationships with parent-child lifecycle management
+- added supervision strategies: stop, restart, or escalate on panic
 
-Format: Write only the log entry text, starting with "today's log :" followed by bullet points. No additional explanations or formatting.`;
+Format: Write only the log entry text, starting with "today's log :" followed by bullet points. No additional explanations or formatting. Keep it under 150 characters total.`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;

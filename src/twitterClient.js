@@ -1,6 +1,7 @@
 const { Client, auth } = require('twitter-api-sdk');
 const config = require('../config/config');
 const OAuthHandler = require('./oauthHandler');
+const { calculateTwitterLength } = require('./commitFormatter');
 
 /**
  * X API v2 Endpoint Mapping:
@@ -180,9 +181,9 @@ async function postTweet(text, imageBuffer = null, replyToId = null) {
   }
   
   // Twitter's character limit is 280, but URLs count as 23 characters
-  // We'll use a conservative limit of 280 for now
-  if (text.length > 280) {
-    throw new Error(`Tweet text is too long: ${text.length} characters (max 280)`);
+  const twitterLength = calculateTwitterLength(text);
+  if (twitterLength > 280) {
+    throw new Error(`Tweet text is too long: ${twitterLength} Twitter characters (max 280). Raw length: ${text.length} characters`);
   }
 
   try {

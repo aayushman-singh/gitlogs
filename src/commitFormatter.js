@@ -12,6 +12,40 @@ function truncateText(text, maxLength) {
     : truncated + '...';
 }
 
+/**
+ * Calculate Twitter character count
+ * URLs count as 23 characters regardless of actual length
+ * @param {string} text - Text to count
+ * @returns {number} - Twitter character count
+ */
+function calculateTwitterLength(text) {
+  // Twitter counts URLs as 23 characters
+  // Match URLs (http://, https://, or www.)
+  const urlRegex = /https?:\/\/[^\s]+|www\.[^\s]+/gi;
+  let twitterLength = text.length;
+  const matches = text.match(urlRegex);
+  
+  if (matches) {
+    matches.forEach(url => {
+      // Subtract actual URL length and add 23 (Twitter's URL length)
+      twitterLength = twitterLength - url.length + 23;
+    });
+  }
+  
+  return twitterLength;
+}
+
+/**
+ * Extract URLs from text
+ * @param {string} text - Text to extract URLs from
+ * @returns {string[]} - Array of URLs found
+ */
+function extractUrls(text) {
+  const urlRegex = /https?:\/\/[^\s]+|www\.[^\s]+/gi;
+  const matches = text.match(urlRegex);
+  return matches || [];
+}
+
 function parseCommitMessage(message) {
   const lines = message.split('\n');
   const firstLine = lines[0];
@@ -89,31 +123,88 @@ function formatCommit(commit, repository, pusher) {
 }
 
 function formatTweetText(changelogText, commitData, repository, pusher) {
-  const metadataLength = 100;
-  const maxChangelogLength = 280 - metadataLength;
+  const emoji = getCommitEmoji(commitData.type);
+  const MAX_TWITTER_LENGTH = 280;
   
+  // Helper function to build tweet with a given changelog
+  const buildTweet = (changelog) => {
+    return [
+      `${emoji} ${changelog}`,
+      '',
+      `📦 ${repository.name}`,
+      `👤 ${pusher.name}`,
+      `🔗 ${commitData.url}`,
+      '',
+      '#coding #github #dev'
+    ].join('\n');
+  };
+  
+  // Start with full changelog
   let finalChangelog = changelogText;
-  if (changelogText.length > maxChangelogLength) {
-    const truncated = changelogText.substring(0, maxChangelogLength);
-    const lastBullet = truncated.lastIndexOf('\n- ');
-    if (lastBullet > maxChangelogLength * 0.7) {
-      finalChangelog = truncated.substring(0, lastBullet) + '...';
+  let tweetText = buildTweet(finalChangelog);
+  let twitterLength = calculateTwitterLength(tweetText);
+  
+  // If too long, truncate changelog iteratively
+  if (twitterLength > MAX_TWITTER_LENGTH) {
+    // Calculate metadata length (without changelog)
+    const metadataTweet = buildTweet('');
+    const metadataLength = calculateTwitterLength(metadataTweet) - 2; // Subtract emoji + space
+    
+    // Available space for changelog (with buffer)
+    const availableLength = MAX_TWITTER_LENGTH - metadataLength - 10;
+    
+    // Truncate changelog
+    if (changelogText.length > availableLength) {
+      const truncated = changelogText.substring(0, availableLength);
+      const lastBullet = truncated.lastIndexOf('\n- ');
+      if (lastBullet > availableLength * 0.7) {
+        finalChangelog = truncated.substring(0, lastBullet) + '...';
+      } else {
+        finalChangelog = truncateText(changelogText, availableLength);
+      }
     } else {
-      finalChangelog = truncateText(changelogText, maxChangelogLength);
+      finalChangelog = changelogText;
+    }
+    
+    // Rebuild and verify
+    tweetText = buildTweet(finalChangelog);
+    twitterLength = calculateTwitterLength(tweetText);
+    
+    // If still too long, truncate more aggressively
+    if (twitterLength > MAX_TWITTER_LENGTH) {
+      const excess = twitterLength - MAX_TWITTER_LENGTH;
+      const newMaxLength = Math.max(50, finalChangelog.length - excess - 5);
+      finalChangelog = truncateText(changelogText, newMaxLength);
+      tweetText = buildTweet(finalChangelog);
+      twitterLength = calculateTwitterLength(tweetText);
+      
+      // Last resort: remove hashtags if still too long
+      if (twitterLength > MAX_TWITTER_LENGTH) {
+        tweetText = [
+          `${emoji} ${finalChangelog}`,
+          '',
+          `📦 ${repository.name}`,
+          `👤 ${pusher.name}`,
+          `🔗 ${commitData.url}`
+        ].join('\n');
+        twitterLength = calculateTwitterLength(tweetText);
+        
+        // Final truncation if needed
+        if (twitterLength > MAX_TWITTER_LENGTH) {
+          const finalExcess = twitterLength - MAX_TWITTER_LENGTH;
+          const finalMaxLength = Math.max(30, finalChangelog.length - finalExcess);
+          finalChangelog = truncateText(changelogText, finalMaxLength);
+          tweetText = [
+            `${emoji} ${finalChangelog}`,
+            '',
+            `📦 ${repository.name}`,
+            `👤 ${pusher.name}`,
+            `🔗 ${commitData.url}`
+          ].join('\n');
+        }
+      }
     }
   }
-  
-  const emoji = getCommitEmoji(commitData.type);
-  
-  const tweetText = [
-    `${emoji} ${finalChangelog}`,
-    '',
-    `📦 ${repository.name}`,
-    `👤 ${pusher.name}`,
-    `🔗 ${commitData.url}`,
-    '',
-    '#coding #github #dev'
-  ].join('\n');
   
   return tweetText;
 }
@@ -122,6 +213,8 @@ module.exports = {
   formatCommit,
   formatTweetText,
   truncateText,
-  parseCommitMessage
+  parseCommitMessage,
+  calculateTwitterLength,
+  extractUrls
 };
 
