@@ -89,12 +89,18 @@ async function processCommit(commit, repository, pusher) {
       pusher
     );
 
+    // Validate tweet data before posting
+    if (!tweetData || typeof tweetData !== 'string' || tweetData.trim().length === 0) {
+      throw new Error(`Invalid tweet data generated for commit ${commit.id.substring(0, 7)}`);
+    }
+
     let replyToId = null;
     if (config.database.enabled) {
       replyToId = await database.getLastTweetId(repository.full_name);
     }
 
     console.log('🐦 Posting to X...');
+    console.log(`📝 Tweet preview (${tweetData.length} chars): ${tweetData.substring(0, 100)}...`);
     const tweetId = await twitterClient.postTweet(tweetData, null, replyToId);
 
     if (config.database.enabled) {

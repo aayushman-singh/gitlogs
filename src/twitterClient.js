@@ -170,6 +170,21 @@ async function postTweet(text, imageBuffer = null, replyToId = null) {
     initializeTwitterClient();
   }
 
+  // Validate tweet text
+  if (!text || typeof text !== 'string') {
+    throw new Error('Tweet text is required and must be a string');
+  }
+  
+  if (text.trim().length === 0) {
+    throw new Error('Tweet text cannot be empty');
+  }
+  
+  // Twitter's character limit is 280, but URLs count as 23 characters
+  // We'll use a conservative limit of 280 for now
+  if (text.length > 280) {
+    throw new Error(`Tweet text is too long: ${text.length} characters (max 280)`);
+  }
+
   try {
     const tweetPayload = {
       text: text,
@@ -193,7 +208,32 @@ async function postTweet(text, imageBuffer = null, replyToId = null) {
     return response.data.id;
 
   } catch (error) {
+    // Log detailed error information
     console.error('❌ Error posting tweet:', error);
+    
+    // Log the actual Twitter API error details if available
+    if (error.error && error.error.errors) {
+      console.error('📋 Twitter API Error Details:');
+      error.error.errors.forEach((err, index) => {
+        console.error(`   Error ${index + 1}:`, JSON.stringify(err, null, 2));
+      });
+      if (error.error.title) {
+        console.error(`   Title: ${error.error.title}`);
+      }
+      if (error.error.detail) {
+        console.error(`   Detail: ${error.error.detail}`);
+      }
+    }
+    
+    // Log the tweet payload for debugging (without sensitive data)
+    if (tweetPayload) {
+      console.error('📝 Tweet payload that failed:');
+      console.error(`   Text length: ${tweetPayload.text ? tweetPayload.text.length : 0} characters`);
+      console.error(`   Text preview: ${tweetPayload.text ? tweetPayload.text.substring(0, 100) : 'null'}...`);
+      if (tweetPayload.reply) {
+        console.error(`   Reply to: ${tweetPayload.reply.in_reply_to_tweet_id}`);
+      }
+    }
     
     // Check if error is due to expired token (401 Unauthorized) or refresh token error
     if (error.status === 401 || 
@@ -236,6 +276,19 @@ async function postTweet(text, imageBuffer = null, replyToId = null) {
     }
     if (error.status === 429) {
       throw new Error('X API rate limit exceeded. Please wait before posting again.');
+    }
+    
+    // Handle 400 Bad Request with more specific error messages
+    if (error.status === 400) {
+      let errorMessage = 'Invalid request parameters';
+      if (error.error && error.error.errors && error.error.errors.length > 0) {
+        const firstError = error.error.errors[0];
+        errorMessage = firstError.message || errorMessage;
+        if (firstError.code) {
+          errorMessage = `[${firstError.code}] ${errorMessage}`;
+        }
+      }
+      throw new Error(`Failed to post tweet: ${errorMessage}`);
     }
     
     throw new Error(`Failed to post tweet: ${error.message || error.detail || 'Unknown error'}`);
