@@ -24,6 +24,17 @@ function initDatabase() {
       
       CREATE INDEX IF NOT EXISTS idx_repo_created 
       ON tweets(repo_name, created_at DESC);
+      
+      CREATE TABLE IF NOT EXISTS oauth_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token TEXT NOT NULL,
+        expires_at REAL NOT NULL,
+        refresh_token TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      CREATE INDEX IF NOT EXISTS idx_oauth_expires 
+      ON oauth_tokens(expires_at DESC);
     `);
     
     console.log('✅ Database initialized');
@@ -92,6 +103,78 @@ async function getTweetsForRepo(repoName) {
   }
 }
 
+function storeOAuthToken(token) {
+  if (!db) return false;
+
+  try {
+    // Delete old tokens
+    const deleteStmt = db.prepare('DELETE FROM oauth_tokens');
+    deleteStmt.run();
+    
+    // Insert new token
+    const insertStmt = db.prepare(`
+      INSERT INTO oauth_tokens (token, expires_at, refresh_token)
+      VALUES (?, ?, ?)
+    `);
+    
+    insertStmt.run(
+      JSON.stringify(token),
+      token.expires_at || 0,
+      token.refresh_token || null
+    );
+    
+    console.log('💾 OAuth token stored in database');
+    return true;
+  } catch (error) {
+    console.error('❌ Error storing OAuth token:', error);
+    return false;
+  }
+}
+
+function getOAuthToken() {
+  if (!db) return null;
+
+  try {
+    const stmt = db.prepare(`
+      SELECT token FROM oauth_tokens 
+      ORDER BY expires_at DESC 
+      LIMIT 1
+    `);
+    
+    const row = stmt.get();
+    return row ? JSON.parse(row.token) : null;
+  } catch (error) {
+    console.error('❌ Error getting OAuth token:', error);
+    return null;
+  }
+}
+
+function isOAuthTokenValid() {
+  const token = getOAuthToken();
+  if (!token) return false;
+  
+  const expiresAt = token.expires_at || 0;
+  return Date.now() / 1000 < expiresAt;
+}
+
+function getRefreshToken() {
+  if (!db) return null;
+
+  try {
+    const stmt = db.prepare(`
+      SELECT refresh_token FROM oauth_tokens 
+      ORDER BY expires_at DESC 
+      LIMIT 1
+    `);
+    
+    const row = stmt.get();
+    return row ? row.refresh_token : null;
+  } catch (error) {
+    console.error('❌ Error getting refresh token:', error);
+    return null;
+  }
+}
+
 function closeDatabase() {
   if (db) {
     db.close();
@@ -106,6 +189,10 @@ module.exports = {
   getLastTweetId,
   saveTweetId,
   getTweetsForRepo,
+  storeOAuthToken,
+  getOAuthToken,
+  isOAuthTokenValid,
+  getRefreshToken,
   closeDatabase
 };
 

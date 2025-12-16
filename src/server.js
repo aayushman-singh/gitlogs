@@ -1,8 +1,13 @@
 const express = require('express');
 const config = require('../config/config');
 const webhookHandler = require('./webhookHandler');
+const OAuthHandler = require('./oauthHandler');
 
 const app = express();
+
+// In-memory store for PKCE verifiers (keyed by state)
+// Similar to Flask session storage in Python implementation
+const pkceStore = new Map();
 
 // Capture raw body for webhook signature verification (must be before parsing)
 app.use('/webhook/github', express.raw({ type: '*/*' }), (req, res, next) => {
@@ -25,16 +30,38 @@ app.get('/', (req, res) => {
   });
 });
 
-// X API OAuth callback endpoint (for token generation if needed)
-app.get('/callback', (req, res) => {
+// OAuth 2.0 with PKCE - Start authentication flow
+// Similar to Python auth_start route
+app.get('/oauth', async (req, res) => {
+  try {
+    const oauthHandler = new OAuthHandler();
+    const { authUrl, codeVerifier } = oauthHandler.generateAuthUrl();
+    
+    // Store code verifier with state (using 'state' as key for simplicity)
+    // In production, use a proper session store or generate unique state
+    pkceStore.set('state', codeVerifier);
+    
+    // Redirect to authorization URL
+    res.redirect(authUrl);
+  } catch (error) {
+    console.error('❌ OAuth initialization error:', error);
+    res.status(500).send(`
+      <html>
+        <head><title>OAuth Error</title></head>
+        <body style="font-family: Arial; padding: 40px; max-width: 800px; margin: 0 auto;">
+          <h1>❌ OAuth Initialization Failed</h1>
+          <p><strong>Error:</strong> ${error.message}</p>
+          <p>Make sure OAUTH_CLIENT_ID is set in your .env file.</p>
+        </body>
+      </html>
+    `);
+  }
+});
+
+// OAuth 2.0 callback endpoint with PKCE
+// Similar to Python auth_callback route
+app.get('/oauth/callback', async (req, res) => {
   const { code, error, error_description, state } = req.query;
-  
-  // Log callback details for debugging
-  console.log('📥 OAuth Callback received:');
-  console.log('  Code:', code ? 'Present' : 'Missing');
-  console.log('  Error:', error || 'None');
-  console.log('  Error Description:', error_description || 'None');
-  console.log('  State:', state || 'None');
   
   if (error) {
     console.error('❌ OAuth Error:', error);
@@ -49,56 +76,60 @@ app.get('/callback', (req, res) => {
           <p><strong>Error:</strong> ${error}</p>
           ${error_description ? `<p><strong>Description:</strong> ${error_description}</p>` : ''}
           <p>Check the server logs for more details.</p>
+        </body>
+      </html>
+    `);
+    return;
+  }
+
+  if (!code) {
+    res.status(400).send(`
+      <html>
+        <head><title>OAuth Error</title></head>
+        <body style="font-family: Arial; padding: 40px; max-width: 800px; margin: 0 auto;">
+          <h1>❌ No Authorization Code</h1>
+          <p>No authorization code received. Please try again.</p>
+        </body>
+      </html>
+    `);
+    return;
+  }
+
+  try {
+    // Get stored code verifier
+    const codeVerifier = pkceStore.get(state || 'state');
+    if (!codeVerifier) {
+      throw new Error('PKCE code verifier not found. Please restart the OAuth flow.');
+    }
+
+    // Exchange code for tokens
+    const oauthHandler = new OAuthHandler();
+    const token = await oauthHandler.exchangeCodeForTokens(code, codeVerifier);
+    
+    // Clean up stored verifier
+    pkceStore.delete(state || 'state');
+    
+    res.send(`
+      <html>
+        <head><title>Authentication Successful</title></head>
+        <body style="font-family: Arial; padding: 40px; max-width: 800px; margin: 0 auto;">
+          <h1>✅ Authentication Successful!</h1>
+          <p>Your tokens have been stored. You can now close this window.</p>
           <p style="color: #666; margin-top: 30px;">
-            Common causes:<br>
-            • Callback URL mismatch<br>
-            • PKCE verification failed<br>
-            • Invalid client credentials<br>
-            • Missing required scopes
+            Access token and refresh token have been saved to the database.
           </p>
         </body>
       </html>
     `);
-  } else if (code) {
-    console.log('✅ Authorization code received!');
-    console.log('   Code:', code.substring(0, 20) + '...');
-    console.log('');
-    console.log('📋 Next steps:');
-    console.log('   1. Copy the authorization code from the URL');
-    console.log('   2. Run: OAUTH_CODE=' + code + ' node scripts/get-refresh-token.js');
-    console.log('   3. Or extract it manually from the callback URL');
-    console.log('');
-    res.send(`
+  } catch (error) {
+    console.error('❌ Token exchange error:', error);
+    res.status(500).send(`
       <html>
-        <head><title>OAuth Success</title></head>
+        <head><title>OAuth Error</title></head>
         <body style="font-family: Arial; padding: 40px; max-width: 800px; margin: 0 auto;">
-          <h1>✅ Authorization Code Received</h1>
-          <p>Your authorization code has been received and logged.</p>
-          <p><strong>Check your server console/logs for the next steps.</strong></p>
-          <p style="color: #666; margin-top: 30px;">
-            To complete the OAuth flow, run:<br>
-            <code style="background: #f0f0f0; padding: 5px 10px; border-radius: 3px;">
-              OAUTH_CODE=${code} node scripts/get-refresh-token.js
-            </code>
-          </p>
-          <p style="color: #666;">
-            Or manually extract the code from the URL and use it with the script.
-          </p>
-        </body>
-      </html>
-    `);
-  } else {
-    res.send(`
-      <html>
-        <head><title>X API OAuth Callback</title></head>
-        <body style="font-family: Arial; padding: 40px; max-width: 800px; margin: 0 auto;">
-          <h1>X API OAuth Callback</h1>
-          <p>This endpoint is used for X API OAuth authentication.</p>
-          <p>If you're seeing this, the callback URL is configured correctly.</p>
-          <p>Check the server logs for OAuth token information.</p>
-          <p style="color: #666; margin-top: 30px;">
-            No authorization code or error received. Make sure you're completing the OAuth flow.
-          </p>
+          <h1>❌ Token Exchange Failed</h1>
+          <p><strong>Error:</strong> ${error.message}</p>
+          <p>Check the server logs for more details.</p>
         </body>
       </html>
     `);
@@ -123,6 +154,10 @@ const PORT = config.server.port;
 app.listen(PORT, () => {
   console.log(`🚀 Git→X Bot listening on port ${PORT}`);
   console.log(`📡 Webhook endpoint: http://localhost:${PORT}/webhook/github`);
+  if (config.twitter.clientId) {
+    console.log(`🔐 OAuth endpoint: http://localhost:${PORT}/oauth`);
+    console.log(`   Visit this URL to authenticate with X API (OAuth 2.0 with PKCE)`);
+  }
   console.log(`🔒 Webhook secret is ${config.github.webhookSecret ? 'SET' : 'NOT SET'}`);
   console.log(`🐦 X API credentials are ${config.twitter.apiKey || config.twitter.clientId ? 'SET' : 'NOT SET'}`);
 });

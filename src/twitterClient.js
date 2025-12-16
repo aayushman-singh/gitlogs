@@ -1,7 +1,6 @@
 const { Client, auth } = require('twitter-api-sdk');
 const config = require('../config/config');
-const https = require('https');
-const http = require('http');
+const OAuthHandler = require('./oauthHandler');
 
 /**
  * X API v2 Endpoint Mapping:
@@ -16,132 +15,48 @@ const http = require('http');
  * Token refresh follows OAuth 2.0 PKCE standards (RFC 7636).
  */
 
-// Initialize X API client
+// Initialize X API client (lazy initialization)
 let twitterClient;
 let authClientRef; // Store reference to auth client for token refresh
+let oauthHandler; // OAuth handler for token management (similar to Python XAuth)
+let isInitialized = false;
 
-if (!config.twitter.accessToken) {
-  throw new Error('X API access token (TWITTER_ACCESS_TOKEN) is required');
+// Initialize OAuth handler if client ID is available
+if (config.twitter.clientId) {
+  try {
+    oauthHandler = new OAuthHandler();
+  } catch (error) {
+    console.warn('⚠️  OAuth handler initialization failed:', error.message);
+  }
 }
 
 /**
- * Helper function to refresh access token using proxy with PKCE support
+ * Initialize OAuth 2.0 client with PKCE support (lazy initialization)
  * 
- * OAuth 2.0 Token Refresh Flow:
- * - Public clients (PKCE only): No client_secret required
- * - Confidential clients: Use Basic Auth with client_id:client_secret
+ * Uses OAuthHandler for token management (similar to Python XAuth implementation).
+ * Tokens are stored in database and automatically refreshed.
  * 
- * References:
- * - Twitter OAuth 2.0: https://docs.x.com/fundamentals/authentication/oauth-2-0/authorization-code
- * - PKCE RFC 7636: https://tools.ietf.org/html/rfc7636
- * 
- * @param {Object} authClient - OAuth2User instance with token and client_id
- * @param {string} proxyUrl - Proxy URL to route requests through
- * @returns {Promise<Object>} Token object with access_token, refresh_token, etc.
+ * This function is called automatically when postTweet or verifyCredentials is called.
  */
-async function refreshTokenWithProxy(authClient, proxyUrl) {
-  // Use api.x.com endpoint as per official documentation
-  const tokenEndpoint = 'https://api.x.com/2/oauth2/token';
-  const proxiedUrl = `${proxyUrl}${encodeURIComponent(tokenEndpoint)}`;
-  
-  // Determine if we're using confidential client mode (has client_secret)
-  // or public client mode (PKCE only, no client_secret)
-  const isConfidentialClient = authClient.client_secret && authClient.client_secret !== '';
-  
-  // Build request body parameters for token refresh
-  // For PKCE (public client): only client_id, refresh_token, grant_type
-  // For confidential client: can also use Basic Auth
-  const params = new URLSearchParams({
-    refresh_token: authClient.token.refresh_token,
-    grant_type: 'refresh_token',
-    client_id: authClient.client_id,
-  });
-
-  // Build request headers
-  const headers = {
-    'Content-Type': 'application/x-www-form-urlencoded',
-    'Content-Length': Buffer.byteLength(params.toString()),
-  };
-
-  // For confidential clients, use Basic Auth (RFC 6749 Section 2.3.1)
-  // For public clients (PKCE), client authentication is not used
-  if (isConfidentialClient) {
-    const credentials = Buffer.from(`${authClient.client_id}:${authClient.client_secret}`).toString('base64');
-    headers['Authorization'] = `Basic ${credentials}`;
-    console.log('🔐 Using confidential client mode (Basic Auth)');
-  } else {
-    console.log('🔐 Using public client mode (PKCE only, no client_secret)');
+function initializeTwitterClient() {
+  if (isInitialized && twitterClient) {
+    return; // Already initialized
   }
 
-  return new Promise((resolve, reject) => {
-    const urlObj = new URL(proxiedUrl);
-    const options = {
-      hostname: urlObj.hostname,
-      port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
-      path: urlObj.pathname + urlObj.search,
-      method: 'POST',
-      headers: headers,
-    };
+  if (!config.twitter.clientId) {
+    throw new Error(
+      'X API credentials not properly configured.\n' +
+      'Required:\n' +
+      '  - OAUTH_CLIENT_ID (required for OAuth 2.0 with PKCE)\n' +
+      '  - OAUTH_CLIENT_SECRET (optional, for confidential client mode)\n\n' +
+      'To authenticate with OAuth 2.0 PKCE:\n' +
+      '  1. Set OAUTH_CLIENT_ID in your .env file\n' +
+      '  2. Visit http://localhost:' + config.server.port + '/oauth\n' +
+      '  3. Tokens will be stored automatically in the database'
+    );
+  }
 
-    const req = (urlObj.protocol === 'https:' ? https : http).request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => {
-        data += chunk;
-      });
-      res.on('end', () => {
-        try {
-          // Log response for debugging
-          if (res.statusCode !== 200) {
-            console.error(`❌ Token refresh HTTP ${res.statusCode}:`, data);
-          }
-          
-          const response = JSON.parse(data);
-          if (res.statusCode === 200 && response.access_token) {
-            // Update token in authClient
-            authClient.token = {
-              access_token: response.access_token,
-              token_type: response.token_type || 'Bearer',
-              refresh_token: response.refresh_token || authClient.token.refresh_token,
-              expires_in: response.expires_in,
-              scope: response.scope,
-            };
-            
-            const clientMode = isConfidentialClient ? 'confidential' : 'public (PKCE)';
-            console.log(`✅ Token refreshed successfully via proxy (${clientMode} mode)`);
-            resolve(authClient.token);
-          } else {
-            // Provide more detailed error message
-            const errorMsg = response.error_description || response.error || data || 'Unknown error';
-            reject(new Error(`Token refresh failed (${res.statusCode}): ${errorMsg}`));
-          }
-        } catch (error) {
-          reject(new Error(`Failed to parse token response: ${error.message}. Response: ${data.substring(0, 200)}`));
-        }
-      });
-    });
-
-    req.on('error', (error) => {
-      reject(new Error(`Token refresh request failed: ${error.message}`));
-    });
-
-    req.write(params.toString());
-    req.end();
-  });
-}
-
-/**
- * Initialize OAuth 2.0 client with PKCE support
- * 
- * Supports two modes:
- * 1. Confidential Client: Uses client_id + client_secret (more secure)
- * 2. Public Client: Uses client_id only with PKCE (for apps that can't store secrets)
- * 
- * Both modes support token refresh with proper PKCE compliance.
- */
-
-// Check if we have OAuth 2.0 credentials
-if (config.twitter.clientId) {
-  const callbackUrl = process.env.OAUTH_CALLBACK_URL || `http://localhost:${config.server.port}/callback`;
+  const callbackUrl = process.env.OAUTH_CALLBACK_URL || `http://localhost:${config.server.port}/oauth/callback`;
   
   // Determine client type based on presence of client_secret
   const isConfidentialClient = config.twitter.clientSecret && config.twitter.clientSecret !== '';
@@ -156,109 +71,91 @@ if (config.twitter.clientId) {
   // Add client_secret only if available (confidential client)
   if (isConfidentialClient) {
     authClientConfig.client_secret = config.twitter.clientSecret;
-    console.log('🔐 Initializing OAuth 2.0 confidential client (with client_secret)');
-  } else {
-    console.log('🔐 Initializing OAuth 2.0 public client (PKCE only, no client_secret)');
   }
   
   const authClient = new auth.OAuth2User(authClientConfig);
 
-  // Try to get refresh token from multiple sources
-  const refreshToken = config.twitter.refreshToken || 
-                       process.env.TWITTER_REFRESH_TOKEN || 
-                       null;
+  // Get token from database (similar to Python implementation)
+  // Tokens must be obtained via OAuth flow
+  let storedToken = null;
+  if (oauthHandler) {
+    try {
+      storedToken = oauthHandler.isTokenValid() ? oauthHandler.getOAuthToken() : null;
+    } catch (error) {
+      // Database might not have a token yet
+    }
+  }
+
+  if (!storedToken || !storedToken.access_token) {
+    throw new Error(
+      'No OAuth token found. Please authenticate first.\n' +
+      `Visit http://localhost:${config.server.port}/oauth to authenticate with X API (OAuth 2.0 with PKCE).`
+    );
+  }
+
+  const accessToken = storedToken.access_token;
+  const refreshToken = storedToken.refresh_token || null;
 
   // Set initial token
   authClient.token = {
-    access_token: config.twitter.accessToken,
+    access_token: accessToken,
     token_type: 'Bearer',
     refresh_token: refreshToken || 'dummy_refresh_token', // Placeholder if not available yet
   };
 
-  // Override refreshAccessToken to use PKCE-compliant refresh
-  const originalRefresh = authClient.refreshAccessToken.bind(authClient);
+  // Override refreshAccessToken to use OAuth handler (similar to Python implementation)
+  // This ensures tokens are stored in database and refreshed properly
   authClient.refreshAccessToken = async () => {
-    // Re-check for refresh token in case it was added after initialization
-    const currentRefreshToken = config.twitter.refreshToken || 
-                                process.env.TWITTER_REFRESH_TOKEN || 
-                                authClient.token.refresh_token;
-    
-    const hasValidRefreshToken = currentRefreshToken && 
-                                 currentRefreshToken !== 'dummy_refresh_token';
-    
-    if (!hasValidRefreshToken) {
+    if (!oauthHandler) {
       throw new Error(
-        'Access token expired and refresh token not available.\n' +
-        'Please run: node scripts/get-refresh-token.js\n' +
-        'Then add TWITTER_REFRESH_TOKEN to your .env file.\n' +
-        'Or regenerate your access token from https://developer.x.com'
+        'OAuth handler not available. Please authenticate via OAuth first.\n' +
+        `Visit http://localhost:${config.server.port}/oauth to authenticate.`
       );
     }
-    
-    // Update token with current refresh token if needed
-    if (currentRefreshToken !== authClient.token.refresh_token) {
-      authClient.token.refresh_token = currentRefreshToken;
-    }
-    
-    // Try proxy refresh first (PKCE-compliant)
-    if (config.twitter.proxyUrl) {
-      try {
-        console.log('🔄 Refreshing access token via proxy (PKCE-compliant)...');
-        return await refreshTokenWithProxy(authClient, config.twitter.proxyUrl);
-      } catch (error) {
-        console.error('❌ Proxy refresh failed:', error.message);
-        
-        // Fallback to original SDK method
-        if (originalRefresh) {
-          try {
-            console.log('🔄 Trying SDK default refresh method...');
-            return await originalRefresh();
-          } catch (fallbackError) {
-            throw new Error(
-              `Token refresh failed:\n` +
-              `  Proxy: ${error.message}\n` +
-              `  Fallback: ${fallbackError.message}`
-            );
-          }
-        }
-        
-        throw error;
+
+    try {
+      console.log('🔄 Refreshing token using OAuth handler...');
+      const newToken = await oauthHandler._refreshToken();
+      
+      if (!newToken) {
+        throw new Error(
+          'Token refresh failed. Please re-authenticate.\n' +
+          `Visit http://localhost:${config.server.port}/oauth to authenticate.`
+        );
       }
-    } else {
-      // No proxy configured, use SDK default method
-      try {
-        console.log('🔄 Refreshing access token using SDK method...');
-        return await originalRefresh();
-      } catch (error) {
-        throw new Error(`Token refresh failed: ${error.message}`);
-      }
+
+      // Update authClient with new token
+      authClient.token = {
+        access_token: newToken.access_token,
+        token_type: newToken.token_type || 'Bearer',
+        refresh_token: newToken.refresh_token,
+        expires_in: newToken.expires_in,
+        scope: newToken.scope,
+      };
+      
+      return authClient.token;
+    } catch (error) {
+      console.error('❌ OAuth handler refresh failed:', error.message);
+      throw new Error(
+        `Token refresh failed: ${error.message}\n` +
+        `Please re-authenticate by visiting http://localhost:${config.server.port}/oauth`
+      );
     }
   };
 
   authClientRef = authClient; // Store reference for use in post actions
   twitterClient = new Client(authClient);
+  isInitialized = true;
   
   // Log successful initialization
   const clientType = isConfidentialClient ? 'confidential' : 'public (PKCE)';
   const hasRefreshToken = refreshToken && refreshToken !== 'dummy_refresh_token';
   console.log(`✅ X API client initialized (${clientType} mode)`);
-  console.log(`   Refresh token: ${hasRefreshToken ? 'Available' : 'Not available (will need to run get-refresh-token.js)'}`);
-  
-} else {
-  throw new Error(
-    'X API credentials not properly configured.\n' +
-    'Required:\n' +
-    '  - OAUTH_CLIENT_ID (required)\n' +
-    '  - TWITTER_ACCESS_TOKEN (required)\n' +
-    '  - OAUTH_CLIENT_SECRET (optional, for confidential client mode)\n' +
-    '  - TWITTER_REFRESH_TOKEN (optional, for automatic token refresh)\n\n' +
-    'To get these:\n' +
-    '  1. Go to https://developer.x.com/en/portal/dashboard\n' +
-    '  2. Create or select your app\n' +
-    '  3. Get your Client ID (and optionally Client Secret)\n' +
-    '  4. Run: node scripts/get-refresh-token.js\n' +
-    '  5. Add the tokens to your .env file'
-  );
+  console.log(`   Token source: database`);
+  console.log(`   Refresh token: ${hasRefreshToken ? 'Available' : 'Not available'}`);
+  if (!hasRefreshToken) {
+    console.log(`   To authenticate: Visit http://localhost:${config.server.port}/oauth`);
+  }
 }
 
 /**
@@ -267,6 +164,11 @@ if (config.twitter.clientId) {
  * Endpoint: https://docs.x.com/x-api/posts/manage-tweets/introduction
  */
 async function postTweet(text, imageBuffer = null, replyToId = null) {
+  // Initialize client if not already initialized
+  if (!isInitialized) {
+    initializeTwitterClient();
+  }
+
   try {
     const tweetPayload = {
       text: text,
@@ -296,7 +198,7 @@ async function postTweet(text, imageBuffer = null, replyToId = null) {
     if (error.status === 401 || 
         (error.message && (error.message.includes('Unauthorized') || error.message.includes('expired')))) {
       // Try to refresh token and retry if we have auth client
-      if (authClientRef && config.twitter.clientId && config.twitter.clientSecret) {
+      if (authClientRef && oauthHandler) {
         try {
           console.log('🔄 Access token expired, attempting refresh...');
           await authClientRef.refreshAccessToken();
@@ -309,8 +211,10 @@ async function postTweet(text, imageBuffer = null, replyToId = null) {
           }
         } catch (refreshError) {
           console.error('❌ Failed to refresh token:', refreshError.message);
-          // Don't throw here - let the original error propagate
-          throw new Error(`Token refresh failed: ${refreshError.message}`);
+          throw new Error(
+            `Token refresh failed: ${refreshError.message}\n` +
+            `Please re-authenticate by visiting http://localhost:${config.server.port}/oauth`
+          );
         }
       }
     }
@@ -343,6 +247,11 @@ async function postTweet(text, imageBuffer = null, replyToId = null) {
  * Endpoint: https://docs.x.com/x-api/users/lookup/introduction
  */
 async function verifyCredentials() {
+  // Initialize client if not already initialized
+  if (!isInitialized) {
+    initializeTwitterClient();
+  }
+
   try {
     // X API v2: GET /2/users/me - Get authenticated user
     const response = await twitterClient.users.findMyUser();
