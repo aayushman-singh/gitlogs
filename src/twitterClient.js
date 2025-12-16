@@ -80,7 +80,8 @@ function initializeTwitterClient() {
   let storedToken = null;
   if (oauthHandler) {
     try {
-      storedToken = oauthHandler.isTokenValid() ? oauthHandler.getOAuthToken() : null;
+      // Get token directly from database (supports both DB and file storage)
+      storedToken = require('./database').getOAuthToken();
     } catch (error) {
       // Database might not have a token yet
     }
