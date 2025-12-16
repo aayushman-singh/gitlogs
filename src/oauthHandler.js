@@ -232,8 +232,12 @@ class OAuthHandler {
               expires_at: Date.now() / 1000 + (response.expires_in || 7200),
             };
 
-            db.storeOAuthToken(token);
-            console.log('✅ Tokens stored successfully');
+            const stored = db.storeOAuthToken(token);
+            if (stored) {
+              console.log('✅ Tokens stored successfully');
+            } else {
+              console.error('❌ Failed to store tokens in database. Make sure ENABLE_THREADING=true in your .env file.');
+            }
             resolve(token);
           } catch (error) {
             reject(new Error(`Failed to parse token response: ${error.message}`));

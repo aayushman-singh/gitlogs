@@ -4,15 +4,24 @@ const config = require('../config/config');
 let db = null;
 
 function initDatabase() {
-  if (!config.database.enabled) {
-    console.log('ℹ️  Database disabled - threading not available');
-    return;
-  }
-
+  // Database is always enabled for OAuth token storage
+  // ENABLE_THREADING only controls tweet threading features
   try {
     db = new Database(config.database.path);
     
     db.exec(`
+      CREATE TABLE IF NOT EXISTS oauth_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token TEXT NOT NULL,
+        expires_at REAL NOT NULL,
+        refresh_token TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      CREATE INDEX IF NOT EXISTS idx_oauth_expires 
+      ON oauth_tokens(expires_at DESC);
+      
+      ${config.database.enabled ? `
       CREATE TABLE IF NOT EXISTS tweets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         repo_name TEXT NOT NULL,
@@ -24,20 +33,13 @@ function initDatabase() {
       
       CREATE INDEX IF NOT EXISTS idx_repo_created 
       ON tweets(repo_name, created_at DESC);
-      
-      CREATE TABLE IF NOT EXISTS oauth_tokens (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        token TEXT NOT NULL,
-        expires_at REAL NOT NULL,
-        refresh_token TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-      
-      CREATE INDEX IF NOT EXISTS idx_oauth_expires 
-      ON oauth_tokens(expires_at DESC);
+      ` : ''}
     `);
     
     console.log('✅ Database initialized');
+    if (!config.database.enabled) {
+      console.log('ℹ️  Threading disabled - tweet threading not available');
+    }
   } catch (error) {
     console.error('❌ Database initialization failed:', error);
     db = null;
