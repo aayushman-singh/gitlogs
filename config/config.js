@@ -32,7 +32,35 @@ module.exports = {
   },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY,
-    model: process.env.GEMINI_MODEL || 'gemini-pro'
+    model: process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+  },
+  // Queue configuration for rate limiting and retry mechanism
+  queue: {
+    // Gemini API rate limits: Free tier = 15 RPM, Pay-as-you-go = 1000+ RPM
+    // Set conservatively by default, adjust based on your tier
+    maxRequestsPerMinute: parseInt(process.env.QUEUE_MAX_RPM) || 15,
+    // Number of retry attempts for failed requests
+    maxRetries: parseInt(process.env.QUEUE_MAX_RETRIES) || 3,
+    // Base delay for exponential backoff (ms)
+    baseRetryDelayMs: parseInt(process.env.QUEUE_BASE_RETRY_DELAY) || 2000,
+    // Maximum retry delay (ms) - caps exponential backoff
+    maxRetryDelayMs: parseInt(process.env.QUEUE_MAX_RETRY_DELAY) || 60000,
+    // How often to process the queue (ms)
+    processingIntervalMs: parseInt(process.env.QUEUE_PROCESSING_INTERVAL) || 1000,
+    // Per-user hourly quota (for commercial multi-user deployment)
+    userQuotaLimit: parseInt(process.env.USER_QUOTA_LIMIT) || 100
+  },
+  // Multi-user configuration
+  multiUser: {
+    enabled: process.env.MULTI_USER_ENABLED === 'true',
+    // Default tier for new users
+    defaultTier: process.env.DEFAULT_USER_TIER || 'free',
+    // Tier-based quotas
+    tierQuotas: {
+      free: parseInt(process.env.FREE_TIER_QUOTA) || 50,
+      pro: parseInt(process.env.PRO_TIER_QUOTA) || 500,
+      enterprise: parseInt(process.env.ENTERPRISE_TIER_QUOTA) || 5000
+    }
   }
 };
 

@@ -4,16 +4,30 @@ const commitFormatter = require('./commitFormatter');
 const geminiClient = require('./geminiClient');
 const twitterClient = require('./twitterClient');
 const database = require('./database');
+const repoIndexer = require('./repoIndexer');
 
 /**
  * Verify GitHub webhook signature
+ * Supports both global secret and per-repository secrets (multi-user)
  * 
  * @param {string} payload - Raw request body as string
  * @param {string} signature - X-Hub-Signature-256 header value
+ * @param {string} repoFullName - Repository full name for per-repo secrets
  * @returns {boolean} - True if signature is valid
  */
-function verifyGitHubSignature(payload, signature) {
-  if (!config.github.webhookSecret) {
+function verifyGitHubSignature(payload, signature, repoFullName = null) {
+  // Try per-repository secret first (multi-user support)
+  let secret = null;
+  if (repoFullName) {
+    secret = database.getRepoWebhookSecret(repoFullName);
+  }
+  
+  // Fall back to global secret
+  if (!secret) {
+    secret = config.github.webhookSecret;
+  }
+  
+  if (!secret) {
     console.warn('⚠️  Webhook secret not set - skipping verification (NOT RECOMMENDED)');
     return true;
   }
@@ -23,7 +37,7 @@ function verifyGitHubSignature(payload, signature) {
     return false;
   }
 
-  const hmac = crypto.createHmac('sha256', config.github.webhookSecret);
+  const hmac = crypto.createHmac('sha256', secret);
   const digest = 'sha256=' + hmac.update(payload).digest('hex');
   try {
     return crypto.timingSafeEqual(
@@ -35,11 +49,47 @@ function verifyGitHubSignature(payload, signature) {
   }
 }
 
+/**
+ * Check if repository is allowed (supports multi-user)
+ */
 function isRepoAllowed(repoFullName) {
+  // Check if repo is associated with any user
+  const user = database.getUserByRepo(repoFullName);
+  if (user) {
+    return true;
+  }
+  
+  // Fall back to global allowed repos list
   if (!config.github.allowedRepos) {
     return true;
   }
   return config.github.allowedRepos.includes(repoFullName);
+}
+
+/**
+ * Get or generate repository context
+ * Caches context for performance
+ */
+async function getOrGenerateRepoContext(repository, commits = []) {
+  const repoFullName = repository.full_name;
+  
+  // Check cache first
+  if (!database.isRepoContextStale(repoFullName, 24)) {
+    const cached = database.getRepoContext(repoFullName);
+    if (cached) {
+      console.log(`📦 Using cached repo context for: ${repoFullName}`);
+      return cached;
+    }
+  }
+  
+  // Generate context from webhook data (no local clone needed)
+  console.log(`🔍 Generating repo context for: ${repoFullName}`);
+  const context = repoIndexer.generateContextFromWebhook(repository, commits);
+  
+  // Cache the context
+  database.storeRepoContext(repoFullName, context, context.description || '');
+  
+  return context;
 }
 
 function isMergeCommit(commit) {
@@ -62,24 +112,41 @@ function isMergeCommit(commit) {
   return false;
 }
 
-async function processCommit(commit, repository, pusher) {
+/**
+ * Process a single commit with enhanced context
+ * @param {object} commit - Git commit object
+ * @param {object} repository - Repository information
+ * @param {object} pusher - Pusher information
+ * @param {object} options - Additional options (repoContext, userId)
+ */
+async function processCommit(commit, repository, pusher, options = {}) {
+  const { repoContext = null, userId = 'default' } = options;
+  
   try {
-    console.log(`📝 Processing commit: ${commit.id.substring(0, 7)}`);
+    console.log(`📝 Processing commit: ${commit.id.substring(0, 7)} (user: ${userId})`);
 
     const commitData = commitFormatter.formatCommit(commit, repository, pusher);
 
     let changelogText = commitData.subject;
     if (geminiClient.isInitialized()) {
-      console.log('🤖 Generating changelog with Gemini AI...');
+      console.log('🤖 Generating changelog with Gemini AI (with project context)...');
+      
       const commitContext = {
         message: commit.message,
         type: commitData.type,
         filesChanged: commitData.filesChanged,
         added: commit.added || [],
         modified: commit.modified || [],
-        removed: commit.removed || []
+        removed: commit.removed || [],
+        sha: commit.id.substring(0, 7)
       };
-      changelogText = await geminiClient.generateChangelog(commitContext, repository);
+      
+      // Pass repo context and user ID for enhanced prompts and quota tracking
+      changelogText = await geminiClient.generateChangelog(commitContext, repository, {
+        userId,
+        repoContext,
+        priority: geminiClient.PRIORITY.NORMAL
+      });
     }
 
     const tweetData = commitFormatter.formatTweetText(
@@ -110,8 +177,11 @@ async function processCommit(commit, repository, pusher) {
     console.log(`✅ Successfully posted tweet: ${tweetId}`);
     console.log(`🔗 https://x.com/user/status/${tweetId}`);
 
+    return { success: true, tweetId };
+
   } catch (error) {
     console.error(`❌ Error processing commit ${commit.id}:`, error.message);
+    return { success: false, error: error.message };
   }
 }
 
@@ -127,18 +197,9 @@ async function handleWebhook(req, res) {
       rawBody = rawBody.toString('utf8');
     }
 
-    // Verify signature using raw body (GitHub signs the raw request body)
-    if (!verifyGitHubSignature(rawBody, signature)) {
-      console.error('❌ Invalid webhook signature');
-      return res.status(401).send('Invalid signature');
-    }
-
-    // Parse the payload based on content type
-    // Note: We parse from rawBody because express.raw() consumes the stream,
-    // preventing express.json() from parsing it properly
+    // Parse the payload first to get repo name for per-repo secret lookup
     let body;
     if (contentType.includes('application/x-www-form-urlencoded')) {
-      // Form-encoded: GitHub sends payload=<json_string>
       const querystring = require('querystring');
       const parsed = querystring.parse(rawBody);
       if (!parsed.payload) {
@@ -147,7 +208,6 @@ async function handleWebhook(req, res) {
       }
       body = JSON.parse(parsed.payload);
     } else {
-      // JSON payload: Parse directly from rawBody since express.raw() consumed the stream
       try {
         body = JSON.parse(rawBody);
       } catch (parseError) {
@@ -160,6 +220,15 @@ async function handleWebhook(req, res) {
     if (!body || typeof body !== 'object') {
       console.error('❌ Invalid body structure:', typeof body);
       return res.status(400).send('Invalid body structure');
+    }
+
+    // Get repository name for per-repo secret verification
+    const repoFullName = body.repository?.full_name;
+
+    // Verify signature using raw body (supports per-repo secrets)
+    if (!verifyGitHubSignature(rawBody, signature, repoFullName)) {
+      console.error('❌ Invalid webhook signature');
+      return res.status(401).send('Invalid signature');
     }
 
     if (event !== 'push') {
@@ -196,16 +265,46 @@ async function handleWebhook(req, res) {
       return res.status(200).send('Repository not allowed');
     }
 
+    // Get user associated with this repository (multi-user support)
+    const user = database.getUserByRepo(repository.full_name);
+    const userId = user ? user.user_id : 'default';
+    
+    if (user) {
+      console.log(`👤 User: ${user.display_name || user.user_id}`);
+    }
+
+    // Generate/fetch repository context for enhanced AI prompts
+    const repoContext = await getOrGenerateRepoContext(repository, commits);
+    console.log(`📋 Repo context: ${repoContext.languages?.join(', ') || 'unknown stack'}`);
+
     // Filter out merge commits and process individual commits
     const nonMergeCommits = commits.filter(commit => !isMergeCommit(commit));
     
     console.log(`📝 Processing ${nonMergeCommits.length} non-merge commits (skipped ${commits.length - nonMergeCommits.length} merge commits)`);
 
+    // Process commits with enhanced context
+    const results = [];
     for (const commit of nonMergeCommits) {
-      await processCommit(commit, repository, pusher);
+      const result = await processCommit(commit, repository, pusher, {
+        repoContext,
+        userId
+      });
+      results.push(result);
     }
 
-    res.status(200).send('OK');
+    // Log queue stats for monitoring
+    const queueStats = geminiClient.getQueueStats();
+    if (queueStats) {
+      console.log(`📊 Queue stats: ${queueStats.currentQueueLength} pending, ${queueStats.totalProcessed} processed, ${queueStats.rateLimitRemaining} rate limit remaining`);
+    }
+
+    const successCount = results.filter(r => r.success).length;
+    res.status(200).json({
+      status: 'OK',
+      processed: successCount,
+      total: nonMergeCommits.length,
+      userId
+    });
 
   } catch (error) {
     console.error('❌ Webhook handler error:', error);
@@ -213,7 +312,18 @@ async function handleWebhook(req, res) {
   }
 }
 
+/**
+ * Get queue statistics (for admin/monitoring endpoints)
+ */
+function getStats() {
+  return {
+    queue: geminiClient.getQueueStats()
+  };
+}
+
 module.exports = {
-  handleWebhook
+  handleWebhook,
+  getStats,
+  getOrGenerateRepoContext
 };
 

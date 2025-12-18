@@ -2,6 +2,8 @@ const express = require('express');
 const config = require('../config/config');
 const webhookHandler = require('./webhookHandler');
 const OAuthHandler = require('./oauthHandler');
+const database = require('./database');
+const { getQueueService } = require('./queueService');
 
 const app = express();
 
@@ -141,6 +143,147 @@ app.get('/callback', handleOAuthCallback);
 app.get('/oauth/callback', handleOAuthCallback);
 
 app.post('/webhook/github', webhookHandler.handleWebhook);
+
+// ============================================
+// Admin/Management API Endpoints
+// ============================================
+
+// API key middleware for admin endpoints (simple implementation)
+function requireApiKey(req, res, next) {
+  const apiKey = req.headers['x-api-key'] || req.query.api_key;
+  const adminKey = process.env.ADMIN_API_KEY;
+  
+  if (!adminKey) {
+    // No admin key configured - allow in development, block in production
+    if (config.server.nodeEnv === 'development') {
+      return next();
+    }
+    return res.status(403).json({ error: 'Admin API not configured' });
+  }
+  
+  if (apiKey !== adminKey) {
+    return res.status(401).json({ error: 'Invalid API key' });
+  }
+  
+  next();
+}
+
+// Get queue and system stats
+app.get('/api/stats', requireApiKey, (req, res) => {
+  const stats = webhookHandler.getStats();
+  const queueService = getQueueService();
+  
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    queue: queueService ? queueService.getStats() : null,
+    ...stats
+  });
+});
+
+// User management - Create/Update user
+app.post('/api/users', requireApiKey, (req, res) => {
+  const { userId, githubUsername, displayName, email, tier } = req.body;
+  
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
+  }
+  
+  const user = database.upsertUser({
+    userId,
+    githubUsername,
+    displayName,
+    email,
+    tier
+  });
+  
+  if (!user) {
+    return res.status(500).json({ error: 'Failed to create/update user' });
+  }
+  
+  res.json({ success: true, user });
+});
+
+// Get user info
+app.get('/api/users/:userId', requireApiKey, (req, res) => {
+  const user = database.getUser(req.params.userId);
+  
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  
+  const repos = database.getUserRepos(req.params.userId);
+  const usage = database.getApiUsage(req.params.userId, 'gemini');
+  
+  res.json({
+    user,
+    repos,
+    currentHourUsage: usage,
+    quotaRemaining: user.api_quota_limit - usage
+  });
+});
+
+// Add repository to user
+app.post('/api/users/:userId/repos', requireApiKey, (req, res) => {
+  const { repoFullName, webhookSecret } = req.body;
+  
+  if (!repoFullName) {
+    return res.status(400).json({ error: 'repoFullName is required' });
+  }
+  
+  // Ensure user exists
+  const user = database.getUser(req.params.userId);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  
+  const success = database.addUserRepo(req.params.userId, repoFullName, webhookSecret);
+  
+  if (!success) {
+    return res.status(500).json({ error: 'Failed to add repository' });
+  }
+  
+  res.json({ success: true, repoFullName });
+});
+
+// Get user's repositories
+app.get('/api/users/:userId/repos', requireApiKey, (req, res) => {
+  const repos = database.getUserRepos(req.params.userId);
+  res.json({ repos });
+});
+
+// Get repository context
+app.get('/api/repos/:owner/:repo/context', requireApiKey, async (req, res) => {
+  const repoFullName = `${req.params.owner}/${req.params.repo}`;
+  const context = database.getRepoContext(repoFullName);
+  
+  if (!context) {
+    return res.status(404).json({ error: 'Repository context not found' });
+  }
+  
+  res.json({ context });
+});
+
+// Health check with detailed status
+app.get('/api/health', (req, res) => {
+  const queueService = getQueueService();
+  const queueStats = queueService ? queueService.getStats() : null;
+  
+  res.json({
+    status: 'healthy',
+    version: '2.0.0',
+    features: {
+      multiUser: config.multiUser?.enabled || false,
+      queueEnabled: !!queueService,
+      geminiEnabled: !!config.gemini.apiKey
+    },
+    queue: queueStats ? {
+      pending: queueStats.currentQueueLength,
+      processing: queueStats.processingCount,
+      rateLimitRemaining: queueStats.rateLimitRemaining
+    } : null
+  });
+});
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });

@@ -1,24 +1,38 @@
 {
   "name": "git-twitter-bot",
-  "version": "1.0.0",
-  "description": "Auto-tweet git commits with AI-generated changelogs",
+  "version": "2.0.0",
+  "description": "Auto-tweet git commits with AI-generated changelogs - Multi-user commercial edition with rate limiting and queue management",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test:local": "node test-local.js",
     "test:webhook": "node test-webhook.js",
-    "test:gemini": "node test-gemini.js"
+    "test:gemini": "node test-gemini.js",
+    "index-repo": "node src/repoIndexer.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
+    "express": "^4.21.2",
     "twitter-api-sdk": "^1.2.1",
-    "@google/generative-ai": "^0.2.1",
-    "dotenv": "^16.3.1",
-    "better-sqlite3": "^9.2.2"
+    "@google/generative-ai": "^0.21.0",
+    "dotenv": "^16.4.7",
+    "better-sqlite3": "^11.7.0"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2"
-  }
+    "nodemon": "^3.1.9"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "git",
+    "twitter",
+    "x",
+    "changelog",
+    "ai",
+    "gemini",
+    "webhook",
+    "automation"
+  ]
 }
 
