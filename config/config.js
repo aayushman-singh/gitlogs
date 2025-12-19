@@ -3,7 +3,8 @@ require('dotenv').config();
 module.exports = {
   server: {
     port: process.env.PORT || 3000,
-    nodeEnv: process.env.NODE_ENV || 'development'
+    nodeEnv: process.env.NODE_ENV || 'development',
+    frontendUrl: process.env.FRONTEND_URL || 'https://gitlogs.aayushman.dev'
   },
   github: {
     webhookSecret: process.env.WEBHOOK_SECRET,
