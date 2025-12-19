@@ -33,7 +33,6 @@ export default function Header() {
         </Link>
         <nav className="nav">
           <Link to="/" className={isActive('/')}>Home</Link>
-          <Link to="/admin" className={isActive('/admin')}>Admin</Link>
           <Link to="/dashboard" className={isActive('/dashboard')}>Dashboard</Link>
           
           {user ? (
