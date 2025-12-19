@@ -105,7 +105,7 @@ async function generateChangelog(commitData, repository, options = {}) {
     // Build enhanced prompt with repo context
     const projectContext = buildEnhancedPrompt(commitData, repository, repoContext);
 
-    const prompt = `You are a developer writing a daily log entry about your work. Write in a casual, technical style with bullet points.
+    const prompt = `You are a developer writing a log entry about your work. Write in a concise, technical style with bullet points.
 ${projectContext}
 Commit Information:
 - Repository: ${context.repository}
@@ -116,25 +116,25 @@ ${context.addedFiles.length > 0 ? `- Added Files: ${context.addedFiles.join(', '
 ${context.modifiedFiles.length > 0 ? `- Modified Files: ${context.modifiedFiles.join(', ')}` : ''}
 ${context.removedFiles.length > 0 ? `- Removed Files: ${context.removedFiles.join(', ')}` : ''}
 
-Task: Generate a "today's log" style entry that:
-1. Starts with "today's log :" (lowercase, with colon)
-2. Uses bullet points (dash format: "- ") to list what was implemented
-3. Explains technical details in a casual, conversational way
-4. Mentions implementation patterns, design decisions, and how things work
-5. Uses technical jargon naturally (e.g., "factory pattern", "OTP style", "autowatches", "sliding window")
-6. Explains the "why" and "how" behind the implementation
-7. Keep it concise but informative (aim for 2-3 bullet points, maximum 150 characters total)
-8. Write in first person
-9. Be specific about technical concepts and patterns used without making it lengthy
-10. CRITICAL: The entire output must be 150 characters or less (including "today's log :" and all bullet points). This is for a tweet, so brevity is essential.
+Task: Generate a log entry that:
+1. Starts with "update:" (lowercase, with colon)
+2. Uses bullet points (dash format: "- ") to list what was changed
+3. All sentences must be lowercase
+4. No emojis allowed
+5. Only punctuation allowed is comma "," and period "."
+6. Abbreviate most things (e.g., "implementation" -> "impl", "configuration" -> "config", "authentication" -> "auth")
+7. Talk about general changes and purpose rather than exact component or variable name changes
+8. Focus on what was done and why, not specific code details
+9. Keep it concise but informative (aim for 2-3 bullet points, maximum 150 characters total)
+10. CRITICAL: The entire output must be 150 characters or less (including "update:" and all bullet points). This is for a tweet, so brevity is essential.
 11. Use the PROJECT CONTEXT above to understand what this project is about and tailor the log entry accordingly.
 
-Style Example (short version):
-today's log : 
-- implemented hierarchical actor relationships with parent-child lifecycle management
-- added supervision strategies: stop, restart, or escalate on panic
+Style Example:
+update:
+- refactored auth flow to use oauth2 with pkce
+- added rate limiting for api calls
 
-Format: Write only the log entry text, starting with "today's log :" followed by bullet points. No additional explanations or formatting. Keep it under 150 characters total.`;
+Format: Write only the log entry text, starting with "update:" followed by bullet points. No additional explanations or formatting. Keep it under 150 characters total.`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;

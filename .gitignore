@@ -12,3 +12,6 @@ pnpm-lock.yaml
 package-lock.json
 yarn.lock
 
+/frontend/dist
+/frontend/gitlogs-website-design
+/frontend/node_modules

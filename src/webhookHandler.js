@@ -161,14 +161,15 @@ async function processCommit(commit, repository, pusher, options = {}) {
       throw new Error(`Invalid tweet data generated for commit ${commit.id.substring(0, 7)}`);
     }
 
-    let replyToId = null;
+    // Get OG post to quote (if set for this repo)
+    let quoteTweetId = null;
     if (config.database.enabled) {
-      replyToId = await database.getLastTweetId(repository.full_name);
+      quoteTweetId = await database.getOgPost(repository.full_name);
     }
 
     console.log('🐦 Posting to X...');
     console.log(`📝 Tweet preview (${tweetData.length} chars): ${tweetData.substring(0, 100)}...`);
-    const tweetId = await twitterClient.postTweet(tweetData, null, replyToId);
+    const tweetId = await twitterClient.postTweet(tweetData, null, quoteTweetId);
 
     if (config.database.enabled) {
       await database.saveTweetId(repository.full_name, commit.id, tweetId);

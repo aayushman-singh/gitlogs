@@ -9,7 +9,10 @@ module.exports = {
     webhookSecret: process.env.WEBHOOK_SECRET,
     allowedRepos: process.env.ALLOWED_REPOS 
       ? process.env.ALLOWED_REPOS.split(',').map(r => r.trim())
-      : null
+      : null,
+    // GitHub OAuth for user login
+    clientId: process.env.GITHUB_CLIENT_ID,
+    clientSecret: process.env.GITHUB_CLIENT_SECRET
   },
   twitter: {
     // OAuth 2.0 credentials (primary method)

@@ -6,6 +6,12 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "dev:all": "concurrently \"npm run dev\" \"npm run frontend:dev\"",
+    "frontend:dev": "cd frontend && npm run dev",
+    "frontend:build": "cd frontend && npm run build",
+    "frontend:install": "cd frontend && npm install",
+    "setup": "npm install && npm run frontend:install",
+    "build": "npm run frontend:build",
     "test:local": "node test-local.js",
     "test:webhook": "node test-webhook.js",
     "test:gemini": "node test-gemini.js",
@@ -19,6 +25,7 @@
     "better-sqlite3": "^11.7.0"
   },
   "devDependencies": {
+    "concurrently": "^8.2.2",
     "nodemon": "^3.1.9"
   },
   "engines": {

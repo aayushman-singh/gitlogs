@@ -1,0 +1,144 @@
+// API utility functions
+
+// Get backend URL - use production URL for production builds
+// In development, use empty string to leverage Vite proxy
+export function getBackendUrl() {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  // Production builds should use the actual backend URL
+  if (import.meta.env.PROD) {
+    return 'https://gitlogs.aayushman.dev';
+  }
+  // Development uses proxy (empty string)
+  return '';
+}
+
+const API_BASE = getBackendUrl();
+
+// Get admin API key from localStorage
+export function getAdminApiKey() {
+  return localStorage.getItem('adminApiKey') || '';
+}
+
+export function setAdminApiKey(key) {
+  localStorage.setItem('adminApiKey', key);
+}
+
+// Generic API call with admin key
+export async function adminApiCall(endpoint, options = {}) {
+  const apiKey = getAdminApiKey();
+  
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers
+  };
+  
+  if (apiKey) {
+    headers['x-api-key'] = apiKey;
+  }
+  
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers
+  });
+  
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.error || `HTTP ${response.status}`);
+  }
+  
+  return data;
+}
+
+// Public API call (no admin key needed)
+export async function apiCall(endpoint, options = {}) {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers
+  };
+  
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers,
+    credentials: 'include' // Include cookies for session auth
+  });
+  
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.error || `HTTP ${response.status}`);
+  }
+  
+  return data;
+}
+
+// Health check
+export async function getHealth() {
+  return apiCall('/api/health');
+}
+
+// Stats (admin)
+export async function getStats() {
+  return adminApiCall('/api/stats');
+}
+
+// OG Post management
+export async function setOgPost(owner, repo, tweetId) {
+  return adminApiCall(`/api/repos/${owner}/${repo}/og-post`, {
+    method: 'POST',
+    body: JSON.stringify({ tweetId })
+  });
+}
+
+export async function getOgPost(owner, repo) {
+  return adminApiCall(`/api/repos/${owner}/${repo}/og-post`);
+}
+
+// User management (admin)
+export async function createUser(userData) {
+  return adminApiCall('/api/users', {
+    method: 'POST',
+    body: JSON.stringify(userData)
+  });
+}
+
+export async function getUser(userId) {
+  return adminApiCall(`/api/users/${encodeURIComponent(userId)}`);
+}
+
+export async function addUserRepo(userId, repoFullName, webhookSecret) {
+  return adminApiCall(`/api/users/${encodeURIComponent(userId)}/repos`, {
+    method: 'POST',
+    body: JSON.stringify({ repoFullName, webhookSecret })
+  });
+}
+
+export async function getUserRepos(userId) {
+  return adminApiCall(`/api/users/${encodeURIComponent(userId)}/repos`);
+}
+
+export async function getRepoContext(owner, repo) {
+  return adminApiCall(`/api/repos/${owner}/${repo}/context`);
+}
+
+// User auth (GitHub OAuth)
+export async function getCurrentUser() {
+  return apiCall('/auth/me');
+}
+
+export async function getMyRepos() {
+  return apiCall('/auth/repos');
+}
+
+export async function setMyRepoOgPost(repoFullName, tweetId) {
+  return apiCall('/auth/repos/og-post', {
+    method: 'POST',
+    body: JSON.stringify({ repoFullName, tweetId })
+  });
+}
+
+export async function logout() {
+  return apiCall('/auth/logout', { method: 'POST' });
+}

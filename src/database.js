@@ -77,9 +77,9 @@ function initDatabase() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
-      
+
       CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id);
-      
+
       -- User repositories association
       CREATE TABLE IF NOT EXISTS user_repos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,10 +91,10 @@ function initDatabase() {
         UNIQUE(user_id, repo_full_name),
         FOREIGN KEY (user_id) REFERENCES users(user_id)
       );
-      
+
       CREATE INDEX IF NOT EXISTS idx_user_repos_repo ON user_repos(repo_full_name);
       CREATE INDEX IF NOT EXISTS idx_user_repos_user ON user_repos(user_id);
-      
+
       -- Repository context cache
       CREATE TABLE IF NOT EXISTS repo_contexts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,9 +103,9 @@ function initDatabase() {
         readme_content TEXT,
         last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
       );
-      
+
       CREATE INDEX IF NOT EXISTS idx_repo_contexts_name ON repo_contexts(repo_full_name);
-      
+
       -- OAuth tokens with multi-user support
       CREATE TABLE IF NOT EXISTS oauth_tokens (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,10 +115,9 @@ function initDatabase() {
         refresh_token TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
-      
+
       CREATE INDEX IF NOT EXISTS idx_oauth_expires ON oauth_tokens(expires_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_oauth_user ON oauth_tokens(user_id);
-      
+
       -- Tweets with user association
       CREATE TABLE IF NOT EXISTS tweets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -129,10 +128,9 @@ function initDatabase() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(commit_sha)
       );
-      
+
       CREATE INDEX IF NOT EXISTS idx_repo_created ON tweets(repo_name, created_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_tweets_user ON tweets(user_id);
-      
+
       -- API usage tracking for rate limiting
       CREATE TABLE IF NOT EXISTS api_usage (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -142,9 +140,60 @@ function initDatabase() {
         period_start DATETIME NOT NULL,
         period_end DATETIME NOT NULL
       );
-      
-      CREATE INDEX IF NOT EXISTS idx_api_usage_user_period ON api_usage(user_id, period_start);
+
+      -- Original posts for quoting (one per repo)
+      CREATE TABLE IF NOT EXISTS og_posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        repo_name TEXT UNIQUE NOT NULL,
+        tweet_id TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_og_posts_repo ON og_posts(repo_name);
     `);
+
+    // Migration: Add missing user_id columns to existing tables
+    // This handles databases created before multi-user support was added
+    try {
+      // Check if tweets table has user_id column, add it if missing
+      const tweetsColumns = db.prepare("PRAGMA table_info(tweets)").all();
+      const hasUserIdInTweets = tweetsColumns.some(col => col.name === 'user_id');
+
+      if (!hasUserIdInTweets) {
+        console.log('🔄 Migrating tweets table: adding user_id column');
+        db.exec(`ALTER TABLE tweets ADD COLUMN user_id TEXT DEFAULT 'default'`);
+      }
+
+      // Check if oauth_tokens table has user_id column, add it if missing
+      const oauthColumns = db.prepare("PRAGMA table_info(oauth_tokens)").all();
+      const hasUserIdInOauth = oauthColumns.some(col => col.name === 'user_id');
+
+      if (!hasUserIdInOauth) {
+        console.log('🔄 Migrating oauth_tokens table: adding user_id column');
+        db.exec(`ALTER TABLE oauth_tokens ADD COLUMN user_id TEXT DEFAULT 'default'`);
+      }
+
+      // Check if api_usage table has user_id column, add it if missing
+      const apiColumns = db.prepare("PRAGMA table_info(api_usage)").all();
+      const hasUserIdInApi = apiColumns.some(col => col.name === 'user_id');
+
+      if (!hasUserIdInApi) {
+        console.log('🔄 Migrating api_usage table: adding user_id column');
+        db.exec(`ALTER TABLE api_usage ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default'`);
+      }
+
+      // Create indexes for user_id columns (safe to run even if they exist)
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_oauth_user ON oauth_tokens(user_id);
+        CREATE INDEX IF NOT EXISTS idx_tweets_user ON tweets(user_id);
+        CREATE INDEX IF NOT EXISTS idx_api_usage_user_period ON api_usage(user_id, period_start);
+      `);
+
+    } catch (migrationError) {
+      console.error('❌ Database migration failed:', migrationError.message);
+      // Continue with initialization even if migration fails
+      // The app might still work with single-user mode
+    }
     
     console.log('✅ Database initialized with multi-user support');
     if (!config.database.enabled) {
@@ -213,6 +262,53 @@ async function getTweetsForRepo(repoName) {
   } catch (error) {
     console.error('❌ Error getting tweets:', error);
     return [];
+  }
+}
+
+/**
+ * Set the original post (OG post) for a repository
+ * This is the post that all commit tweets will quote
+ */
+async function setOgPost(repoName, tweetId) {
+  if (!db) return false;
+
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO og_posts (repo_name, tweet_id)
+      VALUES (?, ?)
+      ON CONFLICT(repo_name) DO UPDATE SET
+        tweet_id = excluded.tweet_id,
+        created_at = CURRENT_TIMESTAMP
+    `);
+    
+    stmt.run(repoName, tweetId);
+    console.log(`💾 OG post set for ${repoName}: ${tweetId}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Error setting OG post:', error);
+    return false;
+  }
+}
+
+/**
+ * Get the original post (OG post) tweet ID for a repository
+ * Returns the tweet ID that commit tweets should quote
+ */
+async function getOgPost(repoName) {
+  if (!db) return null;
+
+  try {
+    const stmt = db.prepare(`
+      SELECT tweet_id 
+      FROM og_posts 
+      WHERE repo_name = ?
+    `);
+    
+    const row = stmt.get(repoName);
+    return row ? row.tweet_id : null;
+  } catch (error) {
+    console.error('❌ Error getting OG post:', error);
+    return null;
   }
 }
 
@@ -612,6 +708,10 @@ module.exports = {
   getLastTweetId,
   saveTweetId,
   getTweetsForRepo,
+  
+  // OG post functions (for quoting original post)
+  setOgPost,
+  getOgPost,
   
   // OAuth functions
   storeOAuthToken,

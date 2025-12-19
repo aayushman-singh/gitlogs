@@ -164,8 +164,12 @@ function initializeTwitterClient() {
  * Post a tweet using X API v2 Manage Posts endpoint
  * Maps to: POST statuses/update (v1.1) → POST /2/tweets (v2)
  * Endpoint: https://docs.x.com/x-api/posts/manage-tweets/introduction
+ * 
+ * @param {string} text - Tweet text
+ * @param {Buffer} imageBuffer - Optional image buffer (not implemented)
+ * @param {string} quoteTweetId - Optional tweet ID to quote (OG post)
  */
-async function postTweet(text, imageBuffer = null, replyToId = null) {
+async function postTweet(text, imageBuffer = null, quoteTweetId = null) {
   // Initialize client if not already initialized
   if (!isInitialized) {
     initializeTwitterClient();
@@ -191,11 +195,9 @@ async function postTweet(text, imageBuffer = null, replyToId = null) {
     text: text,
   };
 
-  if (replyToId) {
-    tweetPayload.reply = {
-      in_reply_to_tweet_id: replyToId
-    };
-    console.log(`🧵 Threading to tweet: ${replyToId}`);
+  if (quoteTweetId) {
+    tweetPayload.quote_tweet_id = quoteTweetId;
+    console.log(`🔗 Quoting OG post: ${quoteTweetId}`);
   }
 
   try {
@@ -233,8 +235,8 @@ async function postTweet(text, imageBuffer = null, replyToId = null) {
       console.error('📝 Tweet payload that failed:');
       console.error(`   Text length: ${tweetPayload.text ? tweetPayload.text.length : 0} characters`);
       console.error(`   Text preview: ${tweetPayload.text ? tweetPayload.text.substring(0, 100) : 'null'}...`);
-      if (tweetPayload.reply) {
-        console.error(`   Reply to: ${tweetPayload.reply.in_reply_to_tweet_id}`);
+      if (tweetPayload.quote_tweet_id) {
+        console.error(`   Quoting: ${tweetPayload.quote_tweet_id}`);
       }
     }
     
