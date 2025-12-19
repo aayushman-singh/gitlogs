@@ -1,101 +1,292 @@
-import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getHealth, getBackendUrl } from '../utils/api';
+import { getBackendUrl } from '../utils/api';
+
+const benefits = [
+  {
+    title: 'Save Hours Weekly',
+    description:
+      'Stop context-switching between coding and posting. gitlogs handles your social presence automatically.',
+    image:
+      'https://placehold.co/600x400?text=Developer+focused+on+coding+with+dual+monitors+showing+clean+IDE+interface+dark+theme',
+    icon: 'clock',
+  },
+  {
+    title: 'Boost Visibility',
+    description:
+      'Every commit becomes a post. Build your developer brand and showcase your consistency without lifting a finger.',
+    image:
+      'https://placehold.co/600x400?text=Analytics+dashboard+showing+upward+trending+graphs+and+engagement+metrics+modern+dark+UI',
+    icon: 'trend',
+  },
+  {
+    title: 'Zero Effort Required',
+    description:
+      'Connect once, forget forever. Your commits automatically transform into engaging posts that attract opportunities.',
+    image:
+      'https://placehold.co/600x400?text=Automated+workflow+visualization+with+GitHub+and+X+logos+connected+by+smooth+gradient+lines',
+    icon: 'zap',
+  },
+];
+
+const steps = [
+  {
+    number: '01',
+    title: 'Connect GitHub',
+    description: 'Authorize gitlogs with one click. We only need read access to your public commits.',
+    features: ['Secure OAuth', 'Public repos only', 'Revoke anytime'],
+  },
+  {
+    number: '02',
+    title: 'Link X Account',
+    description: 'Connect your X account so we can post on your behalf when you push code.',
+    features: ['Full control', 'Custom templates', 'Edit before post'],
+  },
+  {
+    number: '03',
+    title: 'Code Normally',
+    description: "That's it. Keep pushing commits and building. gitlogs handles the rest automatically.",
+    features: ['Auto-detect commits', 'Smart formatting', 'Perfect timing'],
+  },
+];
+
+const icons = {
+  code: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M9 16L5 12l4-4M15 8l4 4-4 4M13 4l-2 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+  branch: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M6 3a3 3 0 100 6 3 3 0 000-6zm12 12a3 3 0 100 6 3 3 0 000-6zM6 9v3a4 4 0 004 4h4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+  clock: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path
+        d="M12 7v5l3 2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+  trend: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M3 17l6-6 4 4 7-7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M14 8h6v6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+  zap: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+  check: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M20 6L9 17l-5-5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+  arrow: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M5 12h14M13 5l7 7-7 7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+};
 
 export default function Home() {
-  const [health, setHealth] = useState(null);
-  
-  useEffect(() => {
-    getHealth()
-      .then(setHealth)
-      .catch(console.error);
-  }, []);
-  
   return (
-    <div className="container">
-      <div className="hero">
-        <h1>🐙 GitLogs</h1>
-        <p>Automatically tweet your Git commits with AI-powered changelogs</p>
-        <div className="quick-actions" style={{ justifyContent: 'center' }}>
-          <Link to="/admin" className="btn btn-primary">Admin Dashboard</Link>
-          <Link to="/dashboard" className="btn btn-secondary">User Dashboard</Link>
-          <a href={`${getBackendUrl()}/oauth`} className="btn btn-secondary">Authenticate with X</a>
-        </div>
-      </div>
-
-      <div className="grid grid-3 mb-4">
-        <div className="card stat-card">
-          <div className={`stat-value ${health?.status === 'healthy' ? 'green' : 'red'}`}>
-            {health?.status === 'healthy' ? '✓ OK' : '--'}
+    <main className="landing">
+      <section className="landing-hero">
+        <div className="landing-hero-background" aria-hidden="true" />
+        <div className="landing-shell landing-hero-content">
+          <div className="landing-badge landing-animate" style={{ '--delay': '0s' }}>
+            <span className="landing-badge-icon">{icons.code}</span>
+            <span>For developers, by developers</span>
           </div>
-          <div className="stat-label">System Status</div>
-        </div>
-        <div className="card stat-card">
-          <div className="stat-value">{health?.queue?.pending ?? '--'}</div>
-          <div className="stat-label">Queue Pending</div>
-        </div>
-        <div className="card stat-card">
-          <div className="stat-value purple">{health?.version ?? '--'}</div>
-          <div className="stat-label">Version</div>
-        </div>
-      </div>
 
-      <div className="card">
-        <div className="card-header">
-          <h2 className="card-title">📋 Quick Start</h2>
-        </div>
-        <ol style={{ paddingLeft: 20, lineHeight: 2 }}>
-          <li>Login with GitHub to connect your repositories</li>
-          <li>Authenticate with X (Twitter) via <a href={`${getBackendUrl()}/oauth`}>/oauth</a></li>
-          <li>Configure your GitHub webhook to point to <code>/webhook/github</code></li>
-          <li>Set an OG post for your repo in the Dashboard</li>
-          <li>Push commits and watch them get tweeted!</li>
-        </ol>
-      </div>
+          <h1 className="landing-title landing-animate" style={{ '--delay': '0.1s' }}>
+            Code more.
+            <br />
+            Post less.
+          </h1>
 
-      <div className="card">
-        <div className="card-header">
-          <h2 className="card-title">🔗 API Endpoints</h2>
+          <p className="landing-lead landing-animate" style={{ '--delay': '0.2s' }}>
+            gitlogs takes your GitHub commits and posts on X on your behalf. Spend your time coding, not yapping.
+          </p>
+
+          <div className="landing-actions landing-animate" style={{ '--delay': '0.3s' }}>
+            <a href={`${getBackendUrl()}/auth/github`} className="landing-button primary">
+              <span className="landing-button-icon">{icons.branch}</span>
+              Get started
+            </a>
+            <Link to="/dashboard" className="landing-button secondary">
+              Login
+            </Link>
+          </div>
+
+          <p className="landing-note landing-animate" style={{ '--delay': '0.4s' }}>
+            No credit card required • 2 minute setup
+          </p>
         </div>
-        <div className="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>Method</th>
-                <th>Endpoint</th>
-                <th>Description</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><span className="badge badge-green">GET</span></td>
-                <td><code>/api/health</code></td>
-                <td>Health check</td>
-              </tr>
-              <tr>
-                <td><span className="badge badge-green">GET</span></td>
-                <td><code>/api/stats</code></td>
-                <td>System statistics (admin)</td>
-              </tr>
-              <tr>
-                <td><span className="badge badge-blue">POST</span></td>
-                <td><code>/webhook/github</code></td>
-                <td>GitHub webhook endpoint</td>
-              </tr>
-              <tr>
-                <td><span className="badge badge-blue">POST</span></td>
-                <td><code>/api/repos/:owner/:repo/og-post</code></td>
-                <td>Set OG post for quoting</td>
-              </tr>
-              <tr>
-                <td><span className="badge badge-green">GET</span></td>
-                <td><code>/auth/github</code></td>
-                <td>GitHub OAuth login</td>
-              </tr>
-            </tbody>
-          </table>
+      </section>
+
+      <section className="landing-section">
+        <div className="landing-shell">
+          <div className="landing-section-header landing-animate" style={{ '--delay': '0.1s' }}>
+            <h2>Why developers choose gitlogs</h2>
+            <p>Built to solve the real problem: staying visible while staying productive.</p>
+          </div>
+
+          <div className="landing-grid">
+            {benefits.map((benefit, index) => (
+              <article
+                key={benefit.title}
+                className="landing-card landing-animate"
+                style={{ '--delay': `${0.1 + index * 0.1}s` }}
+              >
+                <div className="landing-card-media">
+                  <img src={benefit.image} alt={benefit.title} />
+                </div>
+                <div className="landing-card-body">
+                  <div className="landing-card-title">
+                    <span className="landing-icon">{icons[benefit.icon]}</span>
+                    <h3>{benefit.title}</h3>
+                  </div>
+                  <p>{benefit.description}</p>
+                </div>
+              </article>
+            ))}
+          </div>
         </div>
-      </div>
-    </div>
+      </section>
+
+      <section className="landing-section landing-steps-section">
+        <div className="landing-shell">
+          <div className="landing-section-header landing-animate" style={{ '--delay': '0.1s' }}>
+            <h2>Get started in 2 minutes</h2>
+            <p>Simple setup, powerful automation.</p>
+          </div>
+
+          <div className="landing-steps">
+            {steps.map((step, index) => (
+              <article
+                key={step.number}
+                className="landing-step-card landing-animate"
+                style={{ '--delay': `${0.1 + index * 0.1}s` }}
+              >
+                <div className="landing-step-header">
+                  <span className="landing-step-number">{step.number}</span>
+                  {index < steps.length - 1 && (
+                    <span className="landing-step-arrow">{icons.arrow}</span>
+                  )}
+                </div>
+                <div className="landing-step-body">
+                  <h3>{step.title}</h3>
+                  <p>{step.description}</p>
+                </div>
+                <ul className="landing-step-list">
+                  {step.features.map((feature) => (
+                    <li key={feature}>
+                      <span className="landing-check">{icons.check}</span>
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            ))}
+          </div>
+
+          <div className="landing-dashboard landing-animate" style={{ '--delay': '0.3s' }}>
+            <img
+              src="https://placehold.co/1200x600?text=Clean+dashboard+interface+showing+connected+GitHub+and+X+accounts+with+recent+automated+posts+timeline+dark+modern+UI"
+              alt="gitlogs dashboard showing GitHub commits automatically posted to X with engagement metrics and customization options"
+            />
+            <p>Your dashboard shows all automated posts and engagement.</p>
+          </div>
+        </div>
+      </section>
+
+      <footer className="landing-footer">
+        <section className="landing-footer-cta">
+          <div className="landing-shell landing-footer-inner landing-animate" style={{ '--delay': '0.1s' }}>
+            <h2>Ready to automate your presence?</h2>
+            <p>Join developers who code more and post less.</p>
+            <a href={`${getBackendUrl()}/auth/github`} className="landing-button primary">
+              <span className="landing-button-icon">{icons.branch}</span>
+              Get Started Free
+            </a>
+          </div>
+        </section>
+
+        <section className="landing-footer-links">
+          <div className="landing-shell landing-footer-links-inner">
+            <div className="landing-footer-brand">
+              <span className="landing-footer-icon">{icons.code}</span>
+              <span>gitlogs</span>
+            </div>
+            <div className="landing-footer-nav">
+              <a href="#" rel="noreferrer">Privacy</a>
+              <a href="#" rel="noreferrer">Terms</a>
+              <a href="#" rel="noreferrer">Docs</a>
+              <a href="https://github.com" rel="noreferrer" target="_blank">GitHub</a>
+              <a href="https://x.com" rel="noreferrer" target="_blank">X</a>
+            </div>
+            <p>© 2025 gitlogs. For developers, by developers.</p>
+          </div>
+        </section>
+      </footer>
+    </main>
   );
 }
