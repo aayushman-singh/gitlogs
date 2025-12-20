@@ -54,15 +54,22 @@ function verifyGitHubSignature(payload, signature, repoFullName = null) {
  */
 function isRepoAllowed(repoFullName) {
   // First check if repo is enabled by any user
-  if (database.isRepoEnabled(repoFullName)) {
+  const isEnabled = database.isRepoEnabled(repoFullName);
+  console.log(`🔍 Checking repo ${repoFullName}: isRepoEnabled=${isEnabled}`);
+  
+  if (isEnabled) {
     return true;
   }
   
   // Fall back to global allowed repos list (for legacy/admin use)
   if (!config.github.allowedRepos) {
+    console.log(`⚠️  Repo ${repoFullName} not enabled in DB and no ALLOWED_REPOS configured`);
     return false; // No global list and not enabled by user = not allowed
   }
-  return config.github.allowedRepos.includes(repoFullName);
+  
+  const inAllowedList = config.github.allowedRepos.includes(repoFullName);
+  console.log(`🔍 Checking ALLOWED_REPOS for ${repoFullName}: inList=${inAllowedList}`);
+  return inAllowedList;
 }
 
 /**
@@ -168,7 +175,14 @@ async function processCommit(commit, repository, pusher, options = {}) {
 
     console.log('🐦 Posting to X...');
     console.log(`📝 Tweet preview (${tweetData.length} chars): ${tweetData.substring(0, 100)}...`);
-    const tweetId = await twitterClient.postTweet(tweetData, null, quoteTweetId);
+    
+    let tweetId;
+    try {
+      tweetId = await twitterClient.postTweet(tweetData, null, quoteTweetId);
+    } catch (tweetError) {
+      console.error('❌ Twitter posting failed:', tweetError.message);
+      throw tweetError;
+    }
 
     if (config.database.enabled) {
       await database.saveTweetId(repository.full_name, commit.id, tweetId);
@@ -238,7 +252,8 @@ async function handleWebhook(req, res) {
 
     const { commits, repository, pusher, ref } = body;
 
-    console.log(`\n🔔 Push event received`);
+    console.log(`\n🔔 Push event received at ${new Date().toISOString()}`);
+    console.log(`📬 From: ${body.sender?.login || 'unknown'}`);
 
     // Validate required fields
     if (!repository) {

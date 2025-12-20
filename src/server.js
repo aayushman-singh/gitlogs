@@ -774,6 +774,26 @@ app.get('/api/repos/:owner/:repo/og-post', requireApiKey, async (req, res) => {
   res.json({ repoFullName, tweetId });
 });
 
+// Debug endpoint to check repo status
+app.get('/api/debug/repo/:owner/:repo', requireApiKey, (req, res) => {
+  const repoFullName = `${req.params.owner}/${req.params.repo}`;
+  
+  const isEnabled = database.isRepoEnabled(repoFullName);
+  const user = database.getUserByRepo(repoFullName);
+  const context = database.getRepoContext(repoFullName);
+  const allReposInDb = database.getUserRepos(user?.user_id || '');
+  
+  res.json({
+    repoFullName,
+    isEnabled,
+    user: user ? { user_id: user.user_id, github_username: user.github_username } : null,
+    hasContext: !!context,
+    allowedReposEnv: config.github.allowedRepos,
+    webhookSecret: config.github.webhookSecret ? 'SET' : 'NOT SET',
+    allReposForUser: allReposInDb
+  });
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   const queueService = getQueueService();

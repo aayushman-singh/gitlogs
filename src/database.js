@@ -459,11 +459,20 @@ function disableRepo(userId, repoFullName) {
 }
 
 function isRepoEnabled(repoFullName) {
+  if (!ensureDb()) {
+    console.log(`⚠️  Database not ready, cannot check if repo ${repoFullName} is enabled`);
+    return false;
+  }
+  
   const row = getOne(
     'SELECT is_active FROM user_repos WHERE repo_full_name = ? AND is_active = 1 LIMIT 1',
     [repoFullName]
   );
-  return row ? row.is_active === 1 : false;
+  
+  const isEnabled = row ? row.is_active === 1 : false;
+  console.log(`🗄️  DB check for ${repoFullName}: row=${JSON.stringify(row)}, isEnabled=${isEnabled}`);
+  
+  return isEnabled;
 }
 
 function getRepoStatus(userId, repoFullName) {
