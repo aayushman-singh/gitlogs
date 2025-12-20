@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const path = require('path');
 const config = require('../config/config');
 const webhookHandler = require('./webhookHandler');
@@ -33,9 +34,17 @@ app.use('/webhook/github', express.json());
 // Parse JSON for other routes
 app.use(express.json());
 
+// Parse cookies
+app.use(cookieParser());
+
+// Frontend URL for redirects after OAuth
+const FRONTEND_URL = process.env.FRONTEND_URL || config.server.frontendUrl || 'https://gitlogs.aayushman.dev';
+
 // CORS configuration - allow frontend domain
 const allowedOrigins = [
   'https://gitlogs.aayushman.dev',
+  'http://localhost:5173', // Vite dev server
+  'http://localhost:3000',
   process.env.FRONTEND_URL,
   config.server.frontendUrl
 ].filter(Boolean); // Remove undefined values
@@ -48,6 +57,7 @@ app.use(cors({
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.log('CORS blocked origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -79,16 +89,16 @@ app.get('/auth/github/callback', async (req, res) => {
   
   if (error) {
     console.error('❌ GitHub OAuth error:', error);
-    return res.redirect('/dashboard?error=' + encodeURIComponent(error));
+    return res.redirect(`${FRONTEND_URL}/dashboard?error=${encodeURIComponent(error)}`);
   }
   
   if (!code || !state) {
-    return res.redirect('/dashboard?error=missing_code');
+    return res.redirect(`${FRONTEND_URL}/dashboard?error=missing_code`);
   }
   
   // Verify state
   if (!githubStateStore.has(state)) {
-    return res.redirect('/dashboard?error=invalid_state');
+    return res.redirect(`${FRONTEND_URL}/dashboard?error=invalid_state`);
   }
   githubStateStore.delete(state);
   
@@ -110,19 +120,20 @@ app.get('/auth/github/callback', async (req, res) => {
       email: user.email
     });
     
-    // Set session cookie
+    // Set session cookie - use SameSite=None for cross-domain
     res.cookie('session_id', sessionId, {
       httpOnly: true,
-      secure: config.server.nodeEnv === 'production',
-      sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+      secure: true, // Required for SameSite=None
+      sameSite: 'none', // Allow cross-domain cookie
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      domain: config.server.nodeEnv === 'production' ? '.aayushman.dev' : undefined // Share across subdomains
     });
     
     console.log(`✅ GitHub user logged in: @${user.login}`);
-    res.redirect('/dashboard');
+    res.redirect(`${FRONTEND_URL}/dashboard?auth=success`);
   } catch (err) {
     console.error('❌ GitHub OAuth callback error:', err);
-    res.redirect('/dashboard?error=' + encodeURIComponent(err.message));
+    res.redirect(`${FRONTEND_URL}/dashboard?error=${encodeURIComponent(err.message)}`);
   }
 });
 
@@ -140,26 +151,98 @@ function requireAuth(req, res, next) {
   next();
 }
 
-// Get current user
-app.get('/auth/me', (req, res) => {
-  const sessionId = req.cookies?.session_id || githubAuth.getSessionFromCookie(req.headers.cookie);
-  const session = githubAuth.getSession(sessionId);
+// ============================================
+// User API Routes (/api/me/*)
+// ============================================
+
+// In-memory store for GitHub tokens (use Redis/DB in production)
+const githubTokenStore = new Map();
+
+// Register GitHub token from Firebase auth
+app.post('/api/me/github-token', async (req, res) => {
+  const { githubToken } = req.body;
   
-  if (!session) {
+  if (!githubToken) {
+    return res.status(400).json({ error: 'githubToken is required' });
+  }
+  
+  try {
+    // Verify token by fetching user info
+    const user = await githubAuth.getGitHubUser(githubToken);
+    
+    // Store token mapped to GitHub user ID
+    githubTokenStore.set(`github:${user.id}`, {
+      token: githubToken,
+      user,
+      createdAt: Date.now()
+    });
+    
+    // Create/update user in database
+    database.upsertUser({
+      userId: `github:${user.id}`,
+      githubUsername: user.login,
+      displayName: user.name || user.login,
+      email: user.email
+    });
+    
+    // Set a cookie to identify the user
+    res.cookie('github_user_id', user.id, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      domain: config.server.nodeEnv === 'production' ? '.aayushman.dev' : undefined
+    });
+    
+    console.log(`✅ GitHub token registered for @${user.login}`);
+    res.json({ success: true, user: { login: user.login, id: user.id } });
+  } catch (err) {
+    console.error('❌ Failed to register GitHub token:', err);
+    res.status(401).json({ error: 'Invalid GitHub token' });
+  }
+});
+
+// Helper to get GitHub token from cookie
+function getGithubTokenFromCookie(req) {
+  const githubUserId = req.cookies?.github_user_id;
+  if (!githubUserId) return null;
+  
+  const stored = githubTokenStore.get(`github:${githubUserId}`);
+  return stored?.token || null;
+}
+
+// Get current user (based on stored GitHub token)
+app.get('/api/me', (req, res) => {
+  const githubUserId = req.cookies?.github_user_id;
+  if (!githubUserId) {
     return res.status(401).json({ error: 'Not authenticated', user: null });
   }
   
-  res.json({ user: session.user });
+  const stored = githubTokenStore.get(`github:${githubUserId}`);
+  if (!stored) {
+    return res.status(401).json({ error: 'Session expired', user: null });
+  }
+  
+  res.json({ user: stored.user });
 });
 
-// Get user's repos with OG post status
-app.get('/auth/repos', requireAuth, async (req, res) => {
+// Get user's repos with OG post and enabled status
+app.get('/api/me/repos', async (req, res) => {
+  const githubToken = getGithubTokenFromCookie(req);
+  const githubUserId = req.cookies?.github_user_id;
+  
+  if (!githubToken) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  
   try {
-    const repos = await githubAuth.getUserRepos(req.session.accessToken);
+    const repos = await githubAuth.getUserRepos(githubToken);
     
-    // Enrich with OG post data
+    // Enrich with OG post data and enabled status
     const enrichedRepos = await Promise.all(repos.map(async (repo) => {
       const ogPostId = await database.getOgPost(repo.full_name);
+      const repoStatus = githubUserId ? database.getRepoStatus(`github:${githubUserId}`, repo.full_name) : null;
+      
       return {
         id: repo.id,
         full_name: repo.full_name,
@@ -167,7 +250,8 @@ app.get('/auth/repos', requireAuth, async (req, res) => {
         description: repo.description,
         html_url: repo.html_url,
         private: repo.private,
-        og_post_id: ogPostId
+        og_post_id: ogPostId,
+        enabled: repoStatus?.enabled || false
       };
     }));
     
@@ -178,8 +262,81 @@ app.get('/auth/repos', requireAuth, async (req, res) => {
   }
 });
 
+// Enable posting for a repo
+app.post('/api/me/repos/enable', async (req, res) => {
+  const githubToken = getGithubTokenFromCookie(req);
+  const githubUserId = req.cookies?.github_user_id;
+  
+  if (!githubToken || !githubUserId) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  
+  const { repoFullName } = req.body;
+  
+  if (!repoFullName) {
+    return res.status(400).json({ error: 'repoFullName is required' });
+  }
+  
+  try {
+    // Verify user has access to this repo
+    const repos = await githubAuth.getUserRepos(githubToken);
+    const hasAccess = repos.some(r => r.full_name === repoFullName);
+    
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'You do not have access to this repository' });
+    }
+    
+    const success = database.enableRepo(`github:${githubUserId}`, repoFullName);
+    
+    if (!success) {
+      return res.status(500).json({ error: 'Failed to enable repo' });
+    }
+    
+    res.json({ success: true, repoFullName, enabled: true });
+  } catch (err) {
+    console.error('❌ Failed to enable repo:', err);
+    res.status(500).json({ error: 'Failed to enable repo' });
+  }
+});
+
+// Disable posting for a repo
+app.post('/api/me/repos/disable', async (req, res) => {
+  const githubToken = getGithubTokenFromCookie(req);
+  const githubUserId = req.cookies?.github_user_id;
+  
+  if (!githubToken || !githubUserId) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  
+  const { repoFullName } = req.body;
+  
+  if (!repoFullName) {
+    return res.status(400).json({ error: 'repoFullName is required' });
+  }
+  
+  try {
+    const success = database.disableRepo(`github:${githubUserId}`, repoFullName);
+    
+    if (!success) {
+      return res.status(500).json({ error: 'Failed to disable repo' });
+    }
+    
+    res.json({ success: true, repoFullName, enabled: false });
+  } catch (err) {
+    console.error('❌ Failed to disable repo:', err);
+    res.status(500).json({ error: 'Failed to disable repo' });
+  }
+});
+
 // Set OG post for user's repo
-app.post('/auth/repos/og-post', requireAuth, async (req, res) => {
+app.post('/api/me/repos/og-post', async (req, res) => {
+  const githubToken = getGithubTokenFromCookie(req);
+  const githubUserId = req.cookies?.github_user_id;
+  
+  if (!githubToken) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  
   const { repoFullName, tweetId } = req.body;
   
   if (!repoFullName || !tweetId) {
@@ -188,7 +345,7 @@ app.post('/auth/repos/og-post', requireAuth, async (req, res) => {
   
   // Verify user has access to this repo
   try {
-    const repos = await githubAuth.getUserRepos(req.session.accessToken);
+    const repos = await githubAuth.getUserRepos(githubToken);
     const hasAccess = repos.some(r => r.full_name === repoFullName);
     
     if (!hasAccess) {
@@ -203,7 +360,9 @@ app.post('/auth/repos/og-post', requireAuth, async (req, res) => {
     }
     
     // Also associate repo with user
-    database.addUserRepo(`github:${req.user.id}`, repoFullName);
+    if (githubUserId) {
+      database.addUserRepo(`github:${githubUserId}`, repoFullName);
+    }
     
     res.json({ success: true, repoFullName, tweetId });
   } catch (err) {
@@ -214,12 +373,16 @@ app.post('/auth/repos/og-post', requireAuth, async (req, res) => {
 
 // Logout
 app.post('/auth/logout', (req, res) => {
-  const sessionId = req.cookies?.session_id || githubAuth.getSessionFromCookie(req.headers.cookie);
+  const githubUserId = req.cookies?.github_user_id;
   
-  if (sessionId) {
-    githubAuth.deleteSession(sessionId);
+  // Clear stored token
+  if (githubUserId) {
+    githubTokenStore.delete(`github:${githubUserId}`);
   }
   
+  res.clearCookie('github_user_id', {
+    domain: config.server.nodeEnv === 'production' ? '.aayushman.dev' : undefined
+  });
   res.clearCookie('session_id');
   res.json({ success: true });
 });
@@ -229,7 +392,7 @@ app.post('/auth/logout', (req, res) => {
 // ============================================
 
 // OAuth 2.0 with PKCE - Start authentication flow
-app.get('/oauth', async (req, res) => {
+app.get('/auth/x', async (req, res) => {
   try {
     const oauthHandler = new OAuthHandler();
     const { authUrl, codeVerifier } = oauthHandler.generateAuthUrl();
@@ -237,12 +400,12 @@ app.get('/oauth', async (req, res) => {
     pkceStore.set('state', codeVerifier);
     res.redirect(authUrl);
   } catch (error) {
-    console.error('❌ OAuth initialization error:', error);
+    console.error('❌ X OAuth initialization error:', error);
     res.status(500).send(`
       <html>
         <head><title>OAuth Error</title></head>
         <body style="font-family: Arial; padding: 40px; max-width: 800px; margin: 0 auto;">
-          <h1>❌ OAuth Initialization Failed</h1>
+          <h1>❌ X OAuth Initialization Failed</h1>
           <p><strong>Error:</strong> ${error.message}</p>
           <p>Make sure OAUTH_CLIENT_ID is set in your .env file.</p>
         </body>
@@ -251,17 +414,17 @@ app.get('/oauth', async (req, res) => {
   }
 });
 
-// OAuth 2.0 callback endpoint with PKCE
-async function handleOAuthCallback(req, res) {
+// X OAuth callback with PKCE
+app.get('/auth/x/callback', async (req, res) => {
   const { code, error, error_description, state } = req.query;
   
   if (error) {
-    console.error('❌ OAuth Error:', error);
+    console.error('❌ X OAuth Error:', error);
     res.send(`
       <html>
         <head><title>OAuth Error</title></head>
         <body style="font-family: Arial; padding: 40px; max-width: 800px; margin: 0 auto;">
-          <h1>❌ OAuth Authorization Failed</h1>
+          <h1>❌ X Authorization Failed</h1>
           <p><strong>Error:</strong> ${error}</p>
           ${error_description ? `<p><strong>Description:</strong> ${error_description}</p>` : ''}
         </body>
@@ -290,28 +453,25 @@ async function handleOAuthCallback(req, res) {
       <html>
         <head><title>Authentication Successful</title></head>
         <body style="font-family: Arial; padding: 40px; max-width: 800px; margin: 0 auto;">
-          <h1>✅ Authentication Successful!</h1>
+          <h1>✅ X Authentication Successful!</h1>
           <p>Your tokens have been stored. You can now close this window.</p>
           <script>setTimeout(() => window.close(), 2000);</script>
         </body>
       </html>
     `);
   } catch (error) {
-    console.error('❌ Token exchange error:', error);
+    console.error('❌ X Token exchange error:', error);
     res.status(500).send(`
       <html>
         <head><title>OAuth Error</title></head>
         <body style="font-family: Arial; padding: 40px; max-width: 800px; margin: 0 auto;">
-          <h1>❌ Token Exchange Failed</h1>
+          <h1>❌ X Token Exchange Failed</h1>
           <p><strong>Error:</strong> ${error.message}</p>
         </body>
       </html>
     `);
   }
-}
-
-app.get('/callback', handleOAuthCallback);
-app.get('/oauth/callback', handleOAuthCallback);
+});
 
 // ============================================
 // Webhook
@@ -488,8 +648,18 @@ app.get('/api', (req, res) => {
       health: '/api/health',
       stats: '/api/stats',
       webhook: '/webhook/github',
-      oauth: '/oauth',
-      githubAuth: '/auth/github'
+      auth: {
+        github: '/auth/github',
+        githubCallback: '/auth/github/callback',
+        x: '/auth/x',
+        xCallback: '/auth/x/callback',
+        logout: '/auth/logout'
+      },
+      user: {
+        me: '/api/me',
+        repos: '/api/me/repos',
+        setOgPost: '/api/me/repos/og-post'
+      }
     }
   });
 });
@@ -522,13 +692,16 @@ app.use((err, req, res, next) => {
 const PORT = config.server.port;
 app.listen(PORT, () => {
   console.log(`🚀 Git→X Bot listening on port ${PORT}`);
-  console.log(`🌐 Frontend: http://localhost:${PORT}`);
-  console.log(`📡 Webhook: http://localhost:${PORT}/webhook/github`);
-  if (config.twitter.clientId) {
-    console.log(`🐦 X OAuth: http://localhost:${PORT}/oauth`);
-  }
+  console.log(`🌐 Frontend: ${FRONTEND_URL}`);
+  console.log(`📡 Webhook: /webhook/github`);
+  console.log(`🔐 Auth endpoints:`);
   if (config.github.clientId) {
-    console.log(`🐙 GitHub OAuth: http://localhost:${PORT}/auth/github`);
+    console.log(`   GitHub: /auth/github → /auth/github/callback`);
   }
+  if (config.twitter.clientId) {
+    console.log(`   X:      /auth/x → /auth/x/callback`);
+  }
+  console.log(`📊 API: /api/me, /api/me/repos`);
   console.log(`🔒 Webhook secret: ${config.github.webhookSecret ? 'SET' : 'NOT SET'}`);
 });
+

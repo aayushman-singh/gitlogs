@@ -1,5 +1,7 @@
-import { Link } from 'react-router-dom';
-import { getBackendUrl } from '../utils/api';
+import { Link, useNavigate } from 'react-router-dom';
+import { signInWithPopup } from 'firebase/auth';
+import { auth, githubProvider, GithubAuthProvider } from '../firebase';
+import { registerGithubToken } from '../utils/api';
 
 const benefits = [
   {
@@ -146,6 +148,27 @@ const icons = {
 };
 
 export default function Home() {
+  const navigate = useNavigate();
+
+  const handleGetStarted = async () => {
+    try {
+      const result = await signInWithPopup(auth, githubProvider);
+      const credential = GithubAuthProvider.credentialFromResult(result);
+      const githubToken = credential?.accessToken;
+      
+      if (githubToken) {
+        try {
+          await registerGithubToken(githubToken);
+        } catch (e) {
+          console.warn('Failed to register GitHub token:', e);
+        }
+      }
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('GitHub sign-in failed:', error);
+    }
+  };
+
   return (
     <main className="landing">
       <section className="landing-hero">
@@ -167,12 +190,12 @@ export default function Home() {
           </p>
 
           <div className="landing-actions landing-animate" style={{ '--delay': '0.3s' }}>
-            <a href={`${getBackendUrl()}/auth/github`} className="landing-button primary">
+            <button onClick={handleGetStarted} className="landing-button primary">
               <span className="landing-button-icon">{icons.branch}</span>
               Get started
-            </a>
+            </button>
             <Link to="/dashboard" className="landing-button secondary">
-              Login
+              Dashboard
             </Link>
           </div>
 
@@ -263,10 +286,10 @@ export default function Home() {
           <div className="landing-shell landing-footer-inner landing-animate" style={{ '--delay': '0.1s' }}>
             <h2>Ready to automate your presence?</h2>
             <p>Join developers who code more and post less.</p>
-            <a href={`${getBackendUrl()}/auth/github`} className="landing-button primary">
+            <button onClick={handleGetStarted} className="landing-button primary">
               <span className="landing-button-icon">{icons.branch}</span>
               Get Started Free
-            </a>
+            </button>
           </div>
         </section>
 

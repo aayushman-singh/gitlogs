@@ -50,18 +50,17 @@ function verifyGitHubSignature(payload, signature, repoFullName = null) {
 }
 
 /**
- * Check if repository is allowed (supports multi-user)
+ * Check if repository is allowed and enabled for posting (supports multi-user)
  */
 function isRepoAllowed(repoFullName) {
-  // Check if repo is associated with any user
-  const user = database.getUserByRepo(repoFullName);
-  if (user) {
+  // First check if repo is enabled by any user
+  if (database.isRepoEnabled(repoFullName)) {
     return true;
   }
   
-  // Fall back to global allowed repos list
+  // Fall back to global allowed repos list (for legacy/admin use)
   if (!config.github.allowedRepos) {
-    return true;
+    return false; // No global list and not enabled by user = not allowed
   }
   return config.github.allowedRepos.includes(repoFullName);
 }

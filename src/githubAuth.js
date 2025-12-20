@@ -78,7 +78,8 @@ function getAuthUrl(state) {
  * Get callback URL
  */
 function getCallbackUrl() {
-  const baseUrl = process.env.BASE_URL || `http://localhost:${config.server.port}`;
+  // Use API_BASE_URL for the callback since OAuth redirects back to the API
+  const baseUrl = process.env.API_BASE_URL || process.env.BASE_URL || `http://localhost:${config.server.port}`;
   return `${baseUrl}/auth/github/callback`;
 }
 

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { getCurrentUser, getMyRepos, setMyRepoOgPost, getHealth, getBackendUrl } from '../utils/api';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../firebase';
+import { getMyRepos, setMyRepoOgPost, getHealth, getBackendUrl, enableRepo, disableRepo } from '../utils/api';
 
 export default function UserDashboard() {
   const [user, setUser] = useState(null);
@@ -11,24 +13,27 @@ export default function UserDashboard() {
   const [result, setResult] = useState({ type: '', message: '' });
 
   useEffect(() => {
-    loadData();
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        loadReposAndHealth();
+      } else {
+        setLoading(false);
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
-  const loadData = async () => {
+  const loadReposAndHealth = async () => {
     setLoading(true);
     try {
-      const [userData, healthData] = await Promise.all([
-        getCurrentUser().catch(() => null),
+      const [reposData, healthData] = await Promise.all([
+        getMyRepos().catch(() => ({ repos: [] })),
         getHealth().catch(() => null)
       ]);
 
-      setUser(userData?.user || null);
+      setRepos(reposData.repos || []);
       setHealth(healthData);
-
-      if (userData?.user) {
-        const reposData = await getMyRepos().catch(() => ({ repos: [] }));
-        setRepos(reposData.repos || []);
-      }
     } catch (e) {
       console.error('Failed to load data:', e);
     }
@@ -46,7 +51,25 @@ export default function UserDashboard() {
       setResult({ type: 'success', message: `OG post set for ${repoFullName}!` });
       setSelectedRepo(null);
       setOgTweetId('');
-      loadData();
+      loadReposAndHealth();
+    } catch (e) {
+      setResult({ type: 'error', message: e.message });
+    }
+  };
+
+  const handleToggleRepo = async (repoFullName, currentlyEnabled) => {
+    try {
+      if (currentlyEnabled) {
+        await disableRepo(repoFullName);
+        setResult({ type: 'success', message: `Disabled auto-posting for ${repoFullName}` });
+      } else {
+        await enableRepo(repoFullName);
+        setResult({ type: 'success', message: `Enabled auto-posting for ${repoFullName}` });
+      }
+      // Update local state immediately for better UX
+      setRepos(repos.map(r => 
+        r.full_name === repoFullName ? { ...r, enabled: !currentlyEnabled } : r
+      ));
     } catch (e) {
       setResult({ type: 'error', message: e.message });
     }
@@ -114,10 +137,10 @@ export default function UserDashboard() {
 
       <div className="card mb-4">
         <div className="flex gap-4" style={{ alignItems: 'center' }}>
-          <img src={user.avatar_url} alt={user.login} style={{ width: 64, height: 64, borderRadius: '50%' }} />
+          <img src={user.photoURL} alt={user.displayName} style={{ width: 64, height: 64, borderRadius: '50%' }} />
           <div>
-            <h2 style={{ marginBottom: 4 }}>{user.name || user.login}</h2>
-            <p className="text-muted">@{user.login}</p>
+            <h2 style={{ marginBottom: 4 }}>{user.displayName}</h2>
+            <p className="text-muted">{user.email}</p>
           </div>
         </div>
       </div>
@@ -133,8 +156,8 @@ export default function UserDashboard() {
           <h2 className="card-title">⚡ Quick Actions</h2>
         </div>
         <div className="quick-actions">
-          <a href={`${getBackendUrl()}/oauth`} className="btn btn-primary">🔐 Authenticate with X</a>
-          <button className="btn btn-secondary" onClick={loadData}>🔄 Refresh</button>
+          <a href={`${getBackendUrl()}/auth/x`} className="btn btn-primary">🔐 Connect X Account</a>
+          <button className="btn btn-secondary" onClick={loadReposAndHealth}>🔄 Refresh</button>
         </div>
       </div>
 
@@ -151,66 +174,88 @@ export default function UserDashboard() {
         ) : (
           <div>
             {repos.map(repo => (
-              <div key={repo.id || repo.full_name} className="repo-card">
+              <div key={repo.id || repo.full_name} className="repo-card" style={{ opacity: repo.enabled ? 1 : 0.7 }}>
                 <div className="repo-card-header">
-                  <div>
-                    <a href={repo.html_url} target="_blank" rel="noopener noreferrer" className="repo-name">
-                      {repo.full_name}
-                    </a>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <a href={repo.html_url} target="_blank" rel="noopener noreferrer" className="repo-name">
+                        {repo.full_name}
+                      </a>
+                      {repo.private && <span className="badge" style={{ fontSize: 10 }}>Private</span>}
+                    </div>
                     <p className="text-small text-muted">{repo.description || 'No description'}</p>
                   </div>
-                  <div className="repo-og-status">
-                    {repo.og_post_id ? (
-                      <span className="badge badge-green">OG Post Set</span>
-                    ) : (
-                      <span className="badge badge-yellow">No OG Post</span>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    {repo.og_post_id && (
+                      <span className="badge badge-green" style={{ fontSize: 10 }}>OG Set</span>
                     )}
+                    
+                    {/* Toggle Switch */}
+                    <label className="toggle-switch" title={repo.enabled ? 'Disable auto-posting' : 'Enable auto-posting'}>
+                      <input
+                        type="checkbox"
+                        checked={repo.enabled}
+                        onChange={() => handleToggleRepo(repo.full_name, repo.enabled)}
+                      />
+                      <span className="toggle-slider"></span>
+                    </label>
                   </div>
                 </div>
 
-                {selectedRepo === repo.full_name ? (
-                  <div className="mt-2">
-                    <div className="form-group">
-                      <label className="form-label">Tweet ID to Quote</label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        value={ogTweetId}
-                        onChange={(e) => setOgTweetId(e.target.value)}
-                        placeholder="e.g., 1234567890123456789"
-                      />
-                      <p className="text-small text-muted mt-2">
-                        Paste the tweet ID from the URL of the tweet you want all commits to quote.
-                      </p>
-                    </div>
-                    <div className="quick-actions">
-                      <button className="btn btn-primary btn-sm" onClick={() => handleSetOgPost(repo.full_name)}>
-                        Save OG Post
-                      </button>
-                      <button className="btn btn-secondary btn-sm" onClick={() => { setSelectedRepo(null); setOgTweetId(''); }}>
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="quick-actions mt-2">
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => { setSelectedRepo(repo.full_name); setOgTweetId(repo.og_post_id || ''); }}
-                    >
-                      {repo.og_post_id ? 'Change OG Post' : 'Set OG Post'}
-                    </button>
-                    {repo.og_post_id && (
-                      <a
-                        href={`https://x.com/i/status/${repo.og_post_id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn btn-secondary btn-sm"
-                      >
-                        View Tweet
-                      </a>
+                {repo.enabled && (
+                  <>
+                    {selectedRepo === repo.full_name ? (
+                      <div className="mt-2">
+                        <div className="form-group">
+                          <label className="form-label">Tweet ID to Quote</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={ogTweetId}
+                            onChange={(e) => setOgTweetId(e.target.value)}
+                            placeholder="e.g., 1234567890123456789"
+                          />
+                          <p className="text-small text-muted mt-2">
+                            Paste the tweet ID from the URL of the tweet you want all commits to quote.
+                          </p>
+                        </div>
+                        <div className="quick-actions">
+                          <button className="btn btn-primary btn-sm" onClick={() => handleSetOgPost(repo.full_name)}>
+                            Save OG Post
+                          </button>
+                          <button className="btn btn-secondary btn-sm" onClick={() => { setSelectedRepo(null); setOgTweetId(''); }}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="quick-actions mt-2">
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => { setSelectedRepo(repo.full_name); setOgTweetId(repo.og_post_id || ''); }}
+                        >
+                          {repo.og_post_id ? 'Change OG Post' : 'Set OG Post'}
+                        </button>
+                        {repo.og_post_id && (
+                          <a
+                            href={`https://x.com/i/status/${repo.og_post_id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-secondary btn-sm"
+                          >
+                            View Tweet
+                          </a>
+                        )}
+                      </div>
                     )}
-                  </div>
+                  </>
+                )}
+                
+                {!repo.enabled && (
+                  <p className="text-small text-muted mt-2" style={{ fontStyle: 'italic' }}>
+                    Auto-posting disabled. Toggle to enable.
+                  </p>
                 )}
               </div>
             ))}
@@ -232,13 +277,13 @@ export default function UserDashboard() {
             <input
               type="text"
               className="form-input"
-              value={`${window.location.origin}/webhook/github`}
+              value={`${getBackendUrl()}/webhook/github`}
               readOnly
             />
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => {
-                navigator.clipboard.writeText(`${window.location.origin}/webhook/github`);
+                navigator.clipboard.writeText(`${getBackendUrl()}/webhook/github`);
                 setResult({ type: 'success', message: 'Webhook URL copied!' });
               }}
             >

@@ -8,7 +8,7 @@ export function getBackendUrl() {
   }
   // Production builds should use the actual backend URL
   if (import.meta.env.PROD) {
-    return 'https://gitlogs.aayushman.dev';
+    return 'https://api-gitlogs.aayushman.dev';
   }
   // Development uses proxy (empty string)
   return '';
@@ -123,19 +123,41 @@ export async function getRepoContext(owner, repo) {
   return adminApiCall(`/api/repos/${owner}/${repo}/context`);
 }
 
-// User auth (GitHub OAuth)
+// Register GitHub token from Firebase auth (for repo access)
+export async function registerGithubToken(githubToken) {
+  return apiCall('/api/me/github-token', {
+    method: 'POST',
+    body: JSON.stringify({ githubToken })
+  });
+}
+
+// User API (authenticated user data)
 export async function getCurrentUser() {
-  return apiCall('/auth/me');
+  return apiCall('/api/me');
 }
 
 export async function getMyRepos() {
-  return apiCall('/auth/repos');
+  return apiCall('/api/me/repos');
 }
 
 export async function setMyRepoOgPost(repoFullName, tweetId) {
-  return apiCall('/auth/repos/og-post', {
+  return apiCall('/api/me/repos/og-post', {
     method: 'POST',
     body: JSON.stringify({ repoFullName, tweetId })
+  });
+}
+
+export async function enableRepo(repoFullName) {
+  return apiCall('/api/me/repos/enable', {
+    method: 'POST',
+    body: JSON.stringify({ repoFullName })
+  });
+}
+
+export async function disableRepo(repoFullName) {
+  return apiCall('/api/me/repos/disable', {
+    method: 'POST',
+    body: JSON.stringify({ repoFullName })
   });
 }
 

@@ -508,12 +508,97 @@ function getUserRepos(userId) {
   
   try {
     const stmt = db.prepare(`
-      SELECT * FROM user_repos WHERE user_id = ? AND is_active = 1
+      SELECT * FROM user_repos WHERE user_id = ?
     `);
     return stmt.all(userId);
   } catch (error) {
     console.error('❌ Error getting user repos:', error);
     return [];
+  }
+}
+
+/**
+ * Enable posting for a repository
+ */
+function enableRepo(userId, repoFullName) {
+  if (!db) return false;
+  
+  try {
+    const stmt = db.prepare(`
+      UPDATE user_repos SET is_active = 1 
+      WHERE user_id = ? AND repo_full_name = ?
+    `);
+    const result = stmt.run(userId, repoFullName);
+    
+    if (result.changes === 0) {
+      // Repo doesn't exist, add it
+      return addUserRepo(userId, repoFullName);
+    }
+    
+    console.log(`✅ Enabled posting for ${repoFullName}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Error enabling repo:', error);
+    return false;
+  }
+}
+
+/**
+ * Disable posting for a repository
+ */
+function disableRepo(userId, repoFullName) {
+  if (!db) return false;
+  
+  try {
+    const stmt = db.prepare(`
+      UPDATE user_repos SET is_active = 0 
+      WHERE user_id = ? AND repo_full_name = ?
+    `);
+    stmt.run(userId, repoFullName);
+    console.log(`🚫 Disabled posting for ${repoFullName}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Error disabling repo:', error);
+    return false;
+  }
+}
+
+/**
+ * Check if a repo is enabled for posting
+ */
+function isRepoEnabled(repoFullName) {
+  if (!db) return false;
+  
+  try {
+    const stmt = db.prepare(`
+      SELECT is_active FROM user_repos 
+      WHERE repo_full_name = ? AND is_active = 1
+      LIMIT 1
+    `);
+    const row = stmt.get(repoFullName);
+    return row ? row.is_active === 1 : false;
+  } catch (error) {
+    console.error('❌ Error checking repo status:', error);
+    return false;
+  }
+}
+
+/**
+ * Get repo status for a specific user
+ */
+function getRepoStatus(userId, repoFullName) {
+  if (!db) return null;
+  
+  try {
+    const stmt = db.prepare(`
+      SELECT is_active FROM user_repos 
+      WHERE user_id = ? AND repo_full_name = ?
+    `);
+    const row = stmt.get(userId, repoFullName);
+    return row ? { enabled: row.is_active === 1 } : null;
+  } catch (error) {
+    console.error('❌ Error getting repo status:', error);
+    return null;
   }
 }
 
@@ -726,6 +811,12 @@ module.exports = {
   addUserRepo,
   getUserRepos,
   getRepoWebhookSecret,
+  
+  // Repo posting control
+  enableRepo,
+  disableRepo,
+  isRepoEnabled,
+  getRepoStatus,
   
   // Repository context
   storeRepoContext,

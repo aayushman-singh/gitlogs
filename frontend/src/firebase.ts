@@ -1,9 +1,8 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, GithubAuthProvider } from "firebase/auth";
 
 // Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -16,8 +15,12 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const googleProvider = new GoogleAuthProvider();
+
+// GitHub provider with repo scope for accessing user repositories
+const githubProvider = new GithubAuthProvider();
+githubProvider.addScope('read:user');
+githubProvider.addScope('repo');
 
 const analytics = typeof window !== "undefined" ? getAnalytics(app) : null;
 
-export { app, auth, googleProvider, analytics };
+export { app, auth, githubProvider, analytics, GithubAuthProvider };

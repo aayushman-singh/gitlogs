@@ -1,15 +1,91 @@
-# Git→Twitter Bot 🚀
+# GitLogs 🚀
 
-Automatically tweet your git commits with AI-generated changelogs using Google Gemini.
+Automatically post your git commits to X with AI-generated changelogs.
+
+**Live:** [gitlogs.aayushman.dev](https://gitlogs.aayushman.dev) | **API:** [api-gitlogs.aayushman.dev](https://api-gitlogs.aayushman.dev)
 
 ## Features
 
-- ✅ Real-time commit detection via GitHub webhooks
-- ✅ AI-powered changelog generation with Google Gemini
-- ✅ Tweet threading support (optional)
-- ✅ Conventional commit format support
-- ✅ Repository filtering
-- ✅ Secure webhook verification
+- ✅ GitHub OAuth login
+- ✅ Real-time commit detection via webhooks
+- ✅ AI-powered changelog generation (Gemini)
+- ✅ Auto-post to X/Twitter
+- ✅ Tweet threading support
+- ✅ Multi-user support
+
+---
+
+## API Routes
+
+### Auth (OAuth flows)
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/auth/github` | Start GitHub OAuth |
+| GET | `/auth/github/callback` | GitHub callback |
+| GET | `/auth/x` | Start X/Twitter OAuth |
+| GET | `/auth/x/callback` | X callback |
+| POST | `/auth/logout` | Logout |
+
+### User API (requires auth)
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/api/me` | Current user |
+| GET | `/api/me/repos` | User's repositories |
+| POST | `/api/me/repos/og-post` | Set OG post for repo |
+
+### Public API
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/api/health` | Health check |
+| POST | `/webhook/github` | GitHub webhook |
+
+---
+
+## GitHub OAuth Setup
+
+1. Go to [github.com/settings/developers](https://github.com/settings/developers)
+2. Click **OAuth Apps** → **New OAuth App**
+3. Configure:
+
+| Field | Value |
+|-------|-------|
+| Application name | `GitLogs` |
+| Homepage URL | `https://gitlogs.aayushman.dev` |
+| Authorization callback URL | `https://api-gitlogs.aayushman.dev/auth/github/callback` |
+
+4. Add to `.env`:
+```env
+GITHUB_CLIENT_ID=your_client_id
+GITHUB_CLIENT_SECRET=your_client_secret
+```
+
+---
+
+## Environment Variables
+
+```env
+# Server
+PORT=3000
+NODE_ENV=production
+API_BASE_URL=https://api-gitlogs.aayushman.dev
+FRONTEND_URL=https://gitlogs.aayushman.dev
+
+# GitHub OAuth
+GITHUB_CLIENT_ID=xxx
+GITHUB_CLIENT_SECRET=xxx
+
+# GitHub Webhook
+WEBHOOK_SECRET=your_webhook_secret
+
+# X/Twitter OAuth (for posting)
+OAUTH_CLIENT_ID=xxx
+OAUTH_CLIENT_SECRET=xxx
+
+# Gemini AI
+GEMINI_API_KEY=xxx
+```
+
+---
 
 ## Quick Start
 

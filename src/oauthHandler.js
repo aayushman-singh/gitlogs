@@ -17,9 +17,9 @@ const { generatePKCEPair } = require('./pkceHelper');
 const https = require('https');
 const http = require('http');
 
-// Constants matching Python implementation
-const OAUTH_PORT = process.env.OAUTH_PORT || 5001;
-const REDIRECT_URI = process.env.OAUTH_CALLBACK_URL || `http://localhost:${OAUTH_PORT}/callback`;
+// X OAuth callback - use /auth/x/callback for consistency
+const API_BASE = process.env.API_BASE_URL || `http://localhost:${config.server.port}`;
+const REDIRECT_URI = process.env.OAUTH_CALLBACK_URL || `${API_BASE}/auth/x/callback`;
 const AUTH_URL = 'https://twitter.com/i/oauth2/authorize';
 const TOKEN_URL = 'https://api.x.com/2/oauth2/token';
 const SCOPES = ['tweet.read', 'users.read', 'tweet.write', 'offline.access'];
