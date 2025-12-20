@@ -22,4 +22,5 @@ jobs:
             cd ~/gitlogs
             git pull
             pnpm i
+            sleep 60
             sudo systemctl restart gitlogs
