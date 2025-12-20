@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { auth, githubProvider } from '../firebase';
-import { getMyRepos, setMyRepoOgPost, getHealth, getBackendUrl, enableRepo, disableRepo, registerGithubToken } from '../utils/api';
+import { getMyRepos, setMyRepoOgPost, getHealth, getBackendUrl, enableRepo, disableRepo, registerGithubToken, getCurrentUser } from '../utils/api';
 import logo from '../../gitlogs.png';
 
 export default function UserDashboard() {
@@ -9,6 +9,7 @@ export default function UserDashboard() {
   const [repos, setRepos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [health, setHealth] = useState(null);
+  const [xConnected, setXConnected] = useState(false);
   const [selectedRepo, setSelectedRepo] = useState(null);
   const [ogTweetId, setOgTweetId] = useState('');
   const [result, setResult] = useState({ type: '', message: '' });
@@ -55,13 +56,15 @@ export default function UserDashboard() {
   const loadReposAndHealth = async () => {
     setLoading(true);
     try {
-      const [reposData, healthData] = await Promise.all([
+      const [reposData, healthData, userData] = await Promise.all([
         getMyRepos().catch(() => ({ repos: [] })),
-        getHealth().catch(() => null)
+        getHealth().catch(() => null),
+        getCurrentUser().catch(() => null)
       ]);
 
       setRepos(reposData.repos || []);
       setHealth(healthData);
+      setXConnected(Boolean(userData?.xConnected));
     } catch (e) {
       console.error('Failed to load data:', e);
     }
@@ -187,7 +190,18 @@ export default function UserDashboard() {
           <h2 className="card-title">⚡ Quick Actions</h2>
         </div>
         <div className="quick-actions">
-          <a href={`${getBackendUrl()}/auth/x`} className="btn btn-primary">🔐 Connect X Account</a>
+          {xConnected ? (
+            <button className="btn btn-secondary" disabled>✅ Connected to X</button>
+          ) : (
+            <a
+              href={`${getBackendUrl()}/auth/x`}
+              className="btn btn-primary"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              🔐 Connect X Account
+            </a>
+          )}
           <button className="btn btn-secondary" onClick={loadReposAndHealth}>🔄 Refresh</button>
         </div>
       </div>

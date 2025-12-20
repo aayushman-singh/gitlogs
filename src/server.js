@@ -40,6 +40,138 @@ app.use(cookieParser());
 // Frontend URL for redirects after OAuth
 const FRONTEND_URL = process.env.FRONTEND_URL || config.server.frontendUrl || 'https://gitlogs.aayushman.dev';
 
+function renderXAuthPage({ title, message, detail = '', status = 'success' }) {
+  const isSuccess = status === 'success';
+  const accent = isSuccess ? '#3fb950' : '#f85149';
+  const actionLabel = isSuccess ? 'Return to GitLogs' : 'Back to GitLogs';
+  const statusLabel = isSuccess ? 'Connected' : 'Action needed';
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${title}</title>
+        <style>
+          :root {
+            color-scheme: dark;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at top, rgba(88, 166, 255, 0.12), transparent 55%),
+              radial-gradient(circle at 20% 40%, rgba(63, 185, 80, 0.14), transparent 45%),
+              #0b0f14;
+            color: #e6edf3;
+            font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+            padding: 32px 18px;
+          }
+          .card {
+            width: min(560px, 100%);
+            background: rgba(16, 20, 28, 0.92);
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            border-radius: 20px;
+            padding: 36px;
+            box-shadow: 0 28px 60px rgba(0, 0, 0, 0.45);
+            text-align: center;
+          }
+          .logo {
+            width: 140px;
+            height: auto;
+            margin: 0 auto 18px;
+            display: block;
+            filter: invert(1);
+          }
+          .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: ${accent};
+            border: 1px solid ${accent}66;
+            background: ${accent}1a;
+            margin-bottom: 18px;
+          }
+          h1 {
+            font-size: 28px;
+            margin: 0 0 12px;
+          }
+          p {
+            margin: 0 0 12px;
+            color: rgba(226, 232, 240, 0.7);
+            line-height: 1.6;
+          }
+          .detail {
+            margin-top: 12px;
+            padding: 12px 16px;
+            background: rgba(12, 15, 20, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 12px;
+            font-size: 13px;
+            color: rgba(226, 232, 240, 0.65);
+          }
+          .actions {
+            margin-top: 26px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            justify-content: center;
+          }
+          .btn {
+            padding: 12px 18px;
+            border-radius: 10px;
+            border: 1px solid transparent;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+          }
+          .btn-primary {
+            background: ${accent};
+            color: #0b0f14;
+          }
+          .btn-secondary {
+            background: rgba(20, 25, 34, 0.7);
+            border-color: rgba(148, 163, 184, 0.3);
+            color: #e2e8f0;
+          }
+          .note {
+            margin-top: 18px;
+            font-size: 12px;
+            color: rgba(226, 232, 240, 0.5);
+          }
+        </style>
+      </head>
+      <body>
+        <main class="card">
+          <img class="logo" src="/gitlogs.png" alt="GitLogs logo" />
+          <span class="status-pill">${statusLabel}</span>
+          <h1>${title}</h1>
+          <p>${message}</p>
+          ${detail ? `<div class="detail">${detail}</div>` : ''}
+          <div class="actions">
+            <a class="btn btn-primary" href="${FRONTEND_URL}" target="_blank" rel="noopener noreferrer">${actionLabel}</a>
+            <button class="btn btn-secondary" onclick="window.close()">Close</button>
+          </div>
+          ${isSuccess ? '<div class="note">This window will close automatically in a moment.</div>' : ''}
+        </main>
+        ${isSuccess ? '<script>setTimeout(() => window.close(), 2000);</script>' : ''}
+      </body>
+    </html>
+  `;
+}
+
 // CORS configuration - allow frontend domain
 const allowedOrigins = [
   'https://gitlogs.aayushman.dev',
@@ -223,7 +355,7 @@ app.get('/api/me', (req, res) => {
     return res.status(401).json({ error: 'Session expired', user: null });
   }
   
-  res.json({ user: stored.user });
+  res.json({ user: stored.user, xConnected: database.isOAuthTokenValid() });
 });
 
 // Get user's repos with OG post and enabled status
@@ -401,16 +533,14 @@ app.get('/auth/x', async (req, res) => {
     res.redirect(authUrl);
   } catch (error) {
     console.error('❌ X OAuth initialization error:', error);
-    res.status(500).send(`
-      <html>
-        <head><title>OAuth Error</title></head>
-        <body style="font-family: Arial; padding: 40px; max-width: 800px; margin: 0 auto;">
-          <h1>❌ X OAuth Initialization Failed</h1>
-          <p><strong>Error:</strong> ${error.message}</p>
-          <p>Make sure OAUTH_CLIENT_ID is set in your .env file.</p>
-        </body>
-      </html>
-    `);
+    res
+      .status(500)
+      .send(renderXAuthPage({
+        title: 'X OAuth initialization failed',
+        message: 'We could not start the X connection flow. Please try again in a moment.',
+        detail: `Error: ${error.message}. Make sure OAUTH_CLIENT_ID is set.`,
+        status: 'error'
+      }));
   }
 });
 
@@ -420,16 +550,12 @@ app.get('/auth/x/callback', async (req, res) => {
   
   if (error) {
     console.error('❌ X OAuth Error:', error);
-    res.send(`
-      <html>
-        <head><title>OAuth Error</title></head>
-        <body style="font-family: Arial; padding: 40px; max-width: 800px; margin: 0 auto;">
-          <h1>❌ X Authorization Failed</h1>
-          <p><strong>Error:</strong> ${error}</p>
-          ${error_description ? `<p><strong>Description:</strong> ${error_description}</p>` : ''}
-        </body>
-      </html>
-    `);
+    res.send(renderXAuthPage({
+      title: 'X authorization failed',
+      message: 'We did not receive authorization from X.',
+      detail: `Error: ${error}${error_description ? `. ${error_description}` : ''}`,
+      status: 'error'
+    }));
     return;
   }
 
@@ -449,27 +575,22 @@ app.get('/auth/x/callback', async (req, res) => {
     
     pkceStore.delete(state || 'state');
     
-    res.send(`
-      <html>
-        <head><title>Authentication Successful</title></head>
-        <body style="font-family: Arial; padding: 40px; max-width: 800px; margin: 0 auto;">
-          <h1>✅ X Authentication Successful!</h1>
-          <p>Your tokens have been stored. You can now close this window.</p>
-          <script>setTimeout(() => window.close(), 2000);</script>
-        </body>
-      </html>
-    `);
+    res.send(renderXAuthPage({
+      title: 'X connected successfully',
+      message: 'Your X account is now linked to GitLogs.',
+      detail: 'You can safely close this window or return to the dashboard.',
+      status: 'success'
+    }));
   } catch (error) {
     console.error('❌ X Token exchange error:', error);
-    res.status(500).send(`
-      <html>
-        <head><title>OAuth Error</title></head>
-        <body style="font-family: Arial; padding: 40px; max-width: 800px; margin: 0 auto;">
-          <h1>❌ X Token Exchange Failed</h1>
-          <p><strong>Error:</strong> ${error.message}</p>
-        </body>
-      </html>
-    `);
+    res
+      .status(500)
+      .send(renderXAuthPage({
+        title: 'X token exchange failed',
+        message: 'We could not finish the X connection.',
+        detail: `Error: ${error.message}`,
+        status: 'error'
+      }));
   }
 });
 
