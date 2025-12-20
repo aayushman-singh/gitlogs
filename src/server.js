@@ -412,11 +412,28 @@ app.post('/api/me/repos/enable', async (req, res) => {
   try {
     // Verify user has access to this repo
     const repos = await githubAuth.getUserRepos(githubToken);
-    const hasAccess = repos.some(r => r.full_name === repoFullName);
+    const repo = repos.find(r => r.full_name === repoFullName);
     
-    if (!hasAccess) {
+    if (!repo) {
       return res.status(403).json({ error: 'You do not have access to this repository' });
     }
+    
+    // Check if user has admin access (required for webhook creation)
+    if (!repo.permissions?.admin) {
+      return res.status(403).json({ 
+        error: 'Admin access required to enable webhooks. You need push access to this repository.' 
+      });
+    }
+    
+    // Create webhook automatically
+    const webhookUrl = `${process.env.API_BASE_URL || `http://localhost:${config.server.port}`}/webhook/github`;
+    const webhookSecret = config.github.webhookSecret;
+    
+    if (!webhookSecret) {
+      return res.status(500).json({ error: 'Webhook secret not configured on server' });
+    }
+    
+    const webhookResult = await githubAuth.createWebhook(githubToken, repoFullName, webhookUrl, webhookSecret);
     
     const success = database.enableRepo(`github:${githubUserId}`, repoFullName);
     
@@ -424,10 +441,17 @@ app.post('/api/me/repos/enable', async (req, res) => {
       return res.status(500).json({ error: 'Failed to enable repo' });
     }
     
-    res.json({ success: true, repoFullName, enabled: true });
+    console.log(`✅ Enabled repo ${repoFullName} for user github:${githubUserId}`);
+    res.json({ 
+      success: true, 
+      repoFullName, 
+      enabled: true,
+      webhookCreated: !webhookResult.alreadyExists,
+      webhookExists: webhookResult.alreadyExists
+    });
   } catch (err) {
     console.error('❌ Failed to enable repo:', err);
-    res.status(500).json({ error: 'Failed to enable repo' });
+    res.status(500).json({ error: err.message || 'Failed to enable repo' });
   }
 });
 
@@ -447,13 +471,26 @@ app.post('/api/me/repos/disable', async (req, res) => {
   }
   
   try {
+    // Delete webhook
+    const webhookUrl = `${process.env.API_BASE_URL || `http://localhost:${config.server.port}`}/webhook/github`;
+    let webhookDeleted = false;
+    
+    try {
+      const result = await githubAuth.deleteWebhook(githubToken, repoFullName, webhookUrl);
+      webhookDeleted = result.deleted;
+    } catch (webhookErr) {
+      // Log but don't fail - user might have lost admin access
+      console.log(`⚠️ Could not delete webhook for ${repoFullName}:`, webhookErr.message);
+    }
+    
     const success = database.disableRepo(`github:${githubUserId}`, repoFullName);
     
     if (!success) {
       return res.status(500).json({ error: 'Failed to disable repo' });
     }
     
-    res.json({ success: true, repoFullName, enabled: false });
+    console.log(`✅ Disabled repo ${repoFullName} for user github:${githubUserId}`);
+    res.json({ success: true, repoFullName, enabled: false, webhookDeleted });
   } catch (err) {
     console.error('❌ Failed to disable repo:', err);
     res.status(500).json({ error: 'Failed to disable repo' });

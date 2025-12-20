@@ -148,6 +148,102 @@ async function getUserRepos(accessToken) {
 }
 
 /**
+ * Create a webhook on a repository
+ */
+async function createWebhook(accessToken, repoFullName, webhookUrl, webhookSecret) {
+  // First check if webhook already exists
+  const existingHooks = await getWebhooks(accessToken, repoFullName);
+  const existingHook = existingHooks.find(h => h.config?.url === webhookUrl);
+  
+  if (existingHook) {
+    console.log(`✅ Webhook already exists for ${repoFullName}`);
+    return { id: existingHook.id, alreadyExists: true };
+  }
+  
+  const response = await fetch(`https://api.github.com/repos/${repoFullName}/hooks`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+      'User-Agent': 'GitLogs-Bot'
+    },
+    body: JSON.stringify({
+      name: 'web',
+      config: {
+        url: webhookUrl,
+        content_type: 'json',
+        secret: webhookSecret,
+        insecure_ssl: '0'
+      },
+      events: ['push'],
+      active: true
+    })
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to create webhook');
+  }
+  
+  const hook = await response.json();
+  console.log(`✅ Webhook created for ${repoFullName} (ID: ${hook.id})`);
+  return { id: hook.id, alreadyExists: false };
+}
+
+/**
+ * Get webhooks for a repository
+ */
+async function getWebhooks(accessToken, repoFullName) {
+  const response = await fetch(`https://api.github.com/repos/${repoFullName}/hooks`, {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'GitLogs-Bot'
+    }
+  });
+  
+  if (!response.ok) {
+    // If 404, user might not have admin access - return empty array
+    if (response.status === 404) {
+      return [];
+    }
+    throw new Error('Failed to get webhooks');
+  }
+  
+  return response.json();
+}
+
+/**
+ * Delete a webhook from a repository
+ */
+async function deleteWebhook(accessToken, repoFullName, webhookUrl) {
+  const hooks = await getWebhooks(accessToken, repoFullName);
+  const hook = hooks.find(h => h.config?.url === webhookUrl);
+  
+  if (!hook) {
+    console.log(`ℹ️ No webhook found for ${repoFullName}`);
+    return { deleted: false, reason: 'not_found' };
+  }
+  
+  const response = await fetch(`https://api.github.com/repos/${repoFullName}/hooks/${hook.id}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'GitLogs-Bot'
+    }
+  });
+  
+  if (!response.ok && response.status !== 204) {
+    throw new Error('Failed to delete webhook');
+  }
+  
+  console.log(`✅ Webhook deleted for ${repoFullName}`);
+  return { deleted: true };
+}
+
+/**
  * Parse session ID from cookie header
  */
 function getSessionFromCookie(cookieHeader) {
@@ -172,5 +268,8 @@ module.exports = {
   getGitHubUser,
   getUserRepos,
   getSessionFromCookie,
-  generateSessionId
+  generateSessionId,
+  createWebhook,
+  deleteWebhook,
+  getWebhooks
 };
