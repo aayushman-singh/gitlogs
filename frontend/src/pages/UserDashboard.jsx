@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../firebase';
-import { getMyRepos, setMyRepoOgPost, getHealth, getBackendUrl, enableRepo, disableRepo } from '../utils/api';
+import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import { auth, githubProvider } from '../firebase';
+import { getMyRepos, setMyRepoOgPost, getHealth, getBackendUrl, enableRepo, disableRepo, registerGithubToken } from '../utils/api';
+import logo from '../../gitlogs.png';
 
 export default function UserDashboard() {
   const [user, setUser] = useState(null);
@@ -13,7 +14,7 @@ export default function UserDashboard() {
   const [result, setResult] = useState({ type: '', message: '' });
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
         loadReposAndHealth();
@@ -23,6 +24,33 @@ export default function UserDashboard() {
     });
     return () => unsubscribe();
   }, []);
+
+  const handleGitHubLogin = async () => {
+    setLoading(true);
+    try {
+      const result = await signInWithPopup(auth, githubProvider);
+      // Get the GitHub access token from the credential
+      const credential = result._tokenResponse;
+      if (credential?.oauthAccessToken) {
+        // Register the GitHub token with our backend
+        await registerGithubToken(credential.oauthAccessToken);
+      }
+    } catch (error) {
+      console.error('GitHub login error:', error);
+      setResult({ type: 'error', message: error.message || 'Failed to login with GitHub' });
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setUser(null);
+      setRepos([]);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
 
   const loadReposAndHealth = async () => {
     setLoading(true);
@@ -90,16 +118,16 @@ export default function UserDashboard() {
     return (
       <div className="container">
         <div className="card login-card">
-          <div style={{ fontSize: 64, marginBottom: 16 }}>🐙</div>
+          <img src={logo} alt="GitLogs logo" className="logo-mark logo-mark-lg" />
           <h1>Connect your GitHub</h1>
           <p>Login with GitHub to manage your repositories and set OG posts for tweet quoting.</p>
 
-          <a href={`${getBackendUrl()}/auth/github`} className="btn btn-github" style={{ width: '100%', marginBottom: 16 }}>
+          <button onClick={handleGitHubLogin} className="btn btn-github" style={{ width: '100%', marginBottom: 16 }}>
             <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
               <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
             </svg>
             Continue with GitHub
-          </a>
+          </button>
 
           <p className="text-small text-muted">
             We'll request access to your public repositories to set up webhooks.
@@ -136,12 +164,15 @@ export default function UserDashboard() {
       <h1 className="section-title">📊 Dashboard</h1>
 
       <div className="card mb-4">
-        <div className="flex gap-4" style={{ alignItems: 'center' }}>
-          <img src={user.photoURL} alt={user.displayName} style={{ width: 64, height: 64, borderRadius: '50%' }} />
-          <div>
-            <h2 style={{ marginBottom: 4 }}>{user.displayName}</h2>
-            <p className="text-muted">{user.email}</p>
+        <div className="flex gap-4" style={{ alignItems: 'center', justifyContent: 'space-between' }}>
+          <div className="flex gap-4" style={{ alignItems: 'center' }}>
+            <img src={user.photoURL} alt={user.displayName} style={{ width: 64, height: 64, borderRadius: '50%' }} />
+            <div>
+              <h2 style={{ marginBottom: 4 }}>{user.displayName}</h2>
+              <p className="text-muted">{user.email}</p>
+            </div>
           </div>
+          <button onClick={handleLogout} className="btn btn-secondary btn-sm">Logout</button>
         </div>
       </div>
 

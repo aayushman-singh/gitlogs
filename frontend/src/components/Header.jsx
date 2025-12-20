@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { auth, githubProvider, GithubAuthProvider } from '../firebase';
 import { registerGithubToken } from '../utils/api';
+import logo from '../../gitlogs.png';
+import logoIcon from '../../gitlogs-icon-whitebg.png';
 
 export default function Header() {
   const location = useLocation();
@@ -51,8 +53,8 @@ export default function Header() {
     <header className="header">
       <div className="header-content">
         <Link to="/" className="logo">
-          <span className="logo-icon">🐙</span>
-          <span>GitLogs</span>
+          <img src={logo} alt="GitLogs logo" className="logo-mark" />
+          <img src={logoIcon} alt="GitLogs icon" className="logo-mark logo-mark-compact" />
         </Link>
         <nav className="nav">
           <Link to="/" className={isActive('/')}>Home</Link>

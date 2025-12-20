@@ -58,7 +58,7 @@ a:hover {
 .header-content {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 8px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -78,8 +78,32 @@ a:hover {
   text-decoration: none;
 }
 
-.logo-icon {
-  font-size: 24px;
+.logo-mark {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  display: block;
+  filter: invert(1);
+  transform: scale(3);
+  transform-origin: left center;
+}
+
+.logo-mark-compact {
+  display: none;
+  transform: scale(3);
+  transform-origin: left center;
+  filter: none;
+}
+
+.logo-mark-sm {
+  width: 20px;
+  height: 20px;
+}
+
+.logo-mark-lg {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 16px;
 }
 
 .nav {
@@ -974,6 +998,14 @@ code {
   color: #e2e8f0;
 }
 
+.landing-footer-logo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  display: block;
+  filter: invert(1);
+}
+
 .landing-footer-nav {
   display: inline-flex;
   flex-wrap: wrap;
@@ -1097,4 +1129,14 @@ code {
 .toggle-switch input:checked:hover + .toggle-slider {
   background-color: #2ea043;
   border-color: #2ea043;
+}
+
+@media (max-width: 520px) {
+  .logo-mark {
+    display: none;
+  }
+
+  .logo-mark-compact {
+    display: block;
+  }
 }

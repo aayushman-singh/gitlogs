@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { signInWithPopup } from 'firebase/auth';
 import { auth, githubProvider, GithubAuthProvider } from '../firebase';
 import { registerGithubToken } from '../utils/api';
+import logo from '../../gitlogs.png';
 
 const benefits = [
   {
@@ -296,7 +297,7 @@ export default function Home() {
         <section className="landing-footer-links">
           <div className="landing-shell landing-footer-links-inner">
             <div className="landing-footer-brand">
-              <span className="landing-footer-icon">{icons.code}</span>
+              <img src={logo} alt="GitLogs logo" className="landing-footer-logo" />
               <span>gitlogs</span>
             </div>
             <div className="landing-footer-nav">

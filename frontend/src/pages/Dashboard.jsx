@@ -4,6 +4,7 @@ import Admin from './Admin';
 import UserDashboard from './UserDashboard';
 import { auth, githubProvider, GithubAuthProvider } from '../firebase';
 import { registerGithubToken } from '../utils/api';
+import logo from '../../gitlogs.png';
 
 export default function Dashboard() {
   const [authUser, setAuthUser] = useState(null);
@@ -88,7 +89,7 @@ export default function Dashboard() {
     return (
       <div className="container">
         <div className="card login-card">
-          <div style={{ fontSize: 64, marginBottom: 16 }}>🐙</div>
+          <img src={logo} alt="GitLogs logo" className="logo-mark logo-mark-lg" />
           <h1>Sign in to GitLogs</h1>
           <p>Connect your GitHub account to get started.</p>
 
