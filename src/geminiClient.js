@@ -116,34 +116,49 @@ ${context.addedFiles.length > 0 ? `- Added Files: ${context.addedFiles.join(', '
 ${context.modifiedFiles.length > 0 ? `- Modified Files: ${context.modifiedFiles.join(', ')}` : ''}
 ${context.removedFiles.length > 0 ? `- Removed Files: ${context.removedFiles.join(', ')}` : ''}
 
-Task: Generate a log entry that:
-1. Starts with "update:" (lowercase, with colon)
-2. Uses bullet points (dash format: "- ") to list what was changed
-3. All sentences must be lowercase
-4. No emojis allowed
-5. Only punctuation allowed is comma "," and period "."
-6. Abbreviate most things (e.g., "implementation" -> "impl", "configuration" -> "config", "authentication" -> "auth")
-7. Talk about general changes and purpose rather than exact component or variable name changes
-8. Focus on what was done and why, not specific code details
-9. Keep it concise but informative (aim for 2-3 bullet points, maximum 150 characters total)
-10. CRITICAL: The entire output must be 150 characters or less (including "update:" and all bullet points). This is for a tweet, so brevity is essential.
-11. Use the PROJECT CONTEXT above to understand what this project is about and tailor the log entry accordingly.
+CRITICAL RULES - MUST FOLLOW:
+1. ABSOLUTELY NO EMOJIS - Do not use any emojis, symbols, or special characters. Only use plain text letters, numbers, commas, periods, colons, dashes, and spaces.
+2. NO HASHTAGS - Do not include any hashtags in your output.
+3. Starts with "update:" (lowercase, with colon)
+4. Uses bullet points (dash format: "- ") to list what was changed
+5. All sentences must be lowercase
+6. Only punctuation allowed is comma "," and period "."
+7. Abbreviate most things (e.g., "implementation" -> "impl", "configuration" -> "config", "authentication" -> "auth")
+8. Talk about general changes and purpose rather than exact component or variable name changes
+9. Focus on what was done and why, not specific code details
+10. Keep it concise but informative (aim for 2-3 bullet points, maximum 150 characters total)
+11. CRITICAL: The entire output must be 150 characters or less (including "update:" and all bullet points). This is for a tweet, so brevity is essential.
+12. Use the PROJECT CONTEXT above to understand what this project is about and tailor the log entry accordingly.
 
-Style Example:
+Example Output:
 update:
-- refactored auth flow to use oauth2 with pkce
-- added rate limiting for api calls
+- migrated from firebase auth to custom github oauth.
+- updated client & server for new auth service.
 
-Format: Write only the log entry text, starting with "update:" followed by bullet points. No additional explanations or formatting. Keep it under 150 characters total.`;
+WRONG Example (DO NOT DO THIS):
+update:
+- ✨ refactored auth flow
+- 🚀 added new features
+- #coding #github (NO HASHTAGS!)
+
+Format: Write only the log entry text, starting with "update:" followed by bullet points. No additional explanations, formatting, hashtags, or emojis. Keep it under 150 characters total. ABSOLUTELY NO EMOJIS OR HASHTAGS.`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    const changelog = response.text().trim();
+    let changelog = response.text();
+    
+    // Safety check for empty or invalid response
+    if (!changelog || typeof changelog !== 'string') {
+      console.warn('⚠️  Gemini returned invalid response, using commit message');
+      return commitData.message;
+    }
+    
+    changelog = changelog.trim();
 
     // Track API usage
     database.trackApiUsage(userId, 'gemini');
 
-    console.log('🤖 Gemini generated changelog:', changelog.substring(0, 100) + '...');
+    console.log('🤖 Gemini generated changelog:', changelog.length > 0 ? changelog.substring(0, 100) + '...' : '(empty)');
     return changelog;
   };
 

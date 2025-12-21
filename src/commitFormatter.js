@@ -46,6 +46,49 @@ function extractUrls(text) {
   return matches || [];
 }
 
+/**
+ * Remove all emojis from text
+ * Filters out emoji characters including Unicode ranges and common symbols
+ * @param {string} text - Text to filter
+ * @returns {string} - Text with emojis removed
+ */
+function removeEmojis(text) {
+  if (!text || typeof text !== 'string') {
+    return text;
+  }
+  
+  // Comprehensive emoji regex covering:
+  // - Emoticons (😀-🙏)
+  // - Symbols & Pictographs (🌀-🗿)
+  // - Transport & Map Symbols (🚀-🛿)
+  // - Flags (🇦-🇿)
+  // - Miscellaneous Symbols (☀-⛿)
+  // - Dingbats (✀-➿)
+  // - Supplemental Symbols (🀀-🃿)
+  // - Emoji modifiers and zero-width joiners
+  const emojiRegex = /[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F900}-\u{1F9FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1FA00}-\u{1FA6F}]|[\u{1FA70}-\u{1FAFF}]|[\u{FE00}-\u{FE0F}]|[\u{200D}]/gu;
+  
+  return text.replace(emojiRegex, '').trim();
+}
+
+/**
+ * Remove all hashtags from text
+ * Filters out hashtag patterns like #hashtag or #coding #github
+ * @param {string} text - Text to filter
+ * @returns {string} - Text with hashtags removed
+ */
+function removeHashtags(text) {
+  if (!text || typeof text !== 'string') {
+    return text;
+  }
+  
+  // Remove hashtags (word starting with #)
+  // This regex matches # followed by word characters, including at start/end of line
+  const hashtagRegex = /#\w+/g;
+  
+  return text.replace(hashtagRegex, '').trim();
+}
+
 function parseCommitMessage(message) {
   const lines = message.split('\n');
   const firstLine = lines[0];
@@ -123,19 +166,25 @@ function formatCommit(commit, repository, pusher) {
 }
 
 function formatTweetText(changelogText, commitData, repository, pusher) {
-  const emoji = getCommitEmoji(commitData.type);
   const MAX_TWITTER_LENGTH = 280;
+  
+  // Validate changelog text
+  if (!changelogText || typeof changelogText !== 'string' || changelogText.trim().length === 0) {
+    changelogText = commitData.subject || 'update: changes made';
+  }
+  
+  // Get repository URL (prefer html_url, fallback to constructing from full_name)
+  const repoUrl = repository.html_url || (repository.full_name ? `https://github.com/${repository.full_name}/` : 'https://github.com/');
   
   // Helper function to build tweet with a given changelog
   const buildTweet = (changelog) => {
     return [
-      `${emoji} ${changelog}`,
+      changelog,
       '',
-      `📦 ${repository.name}`,
-      `👤 ${pusher.name}`,
-      `🔗 ${commitData.url}`,
+      repository.name || 'Gitlogs',
+      `🔗 ${repoUrl}`,
       '',
-      '#coding #github #dev'
+      'please star the repo ^^ if you like it!'
     ].join('\n');
   };
   
@@ -148,7 +197,7 @@ function formatTweetText(changelogText, commitData, repository, pusher) {
   if (twitterLength > MAX_TWITTER_LENGTH) {
     // Calculate metadata length (without changelog)
     const metadataTweet = buildTweet('');
-    const metadataLength = calculateTwitterLength(metadataTweet) - 2; // Subtract emoji + space
+    const metadataLength = calculateTwitterLength(metadataTweet);
     
     // Available space for changelog (with buffer)
     const availableLength = MAX_TWITTER_LENGTH - metadataLength - 10;
@@ -178,14 +227,15 @@ function formatTweetText(changelogText, commitData, repository, pusher) {
       tweetText = buildTweet(finalChangelog);
       twitterLength = calculateTwitterLength(tweetText);
       
-      // Last resort: remove hashtags if still too long
+      // Last resort: shorten the "please star" message if still too long
       if (twitterLength > MAX_TWITTER_LENGTH) {
         tweetText = [
-          `${emoji} ${finalChangelog}`,
+          finalChangelog,
           '',
-          `📦 ${repository.name}`,
-          `👤 ${pusher.name}`,
-          `🔗 ${commitData.url}`
+          repository.name || 'Gitlogs',
+          `🔗 ${repoUrl}`,
+          '',
+          'please star the repo ^^ if you like it!'
         ].join('\n');
         twitterLength = calculateTwitterLength(tweetText);
         
@@ -194,13 +244,7 @@ function formatTweetText(changelogText, commitData, repository, pusher) {
           const finalExcess = twitterLength - MAX_TWITTER_LENGTH;
           const finalMaxLength = Math.max(30, finalChangelog.length - finalExcess);
           finalChangelog = truncateText(changelogText, finalMaxLength);
-          tweetText = [
-            `${emoji} ${finalChangelog}`,
-            '',
-            `📦 ${repository.name}`,
-            `👤 ${pusher.name}`,
-            `🔗 ${commitData.url}`
-          ].join('\n');
+          tweetText = buildTweet(finalChangelog);
         }
       }
     }
@@ -215,6 +259,8 @@ module.exports = {
   truncateText,
   parseCommitMessage,
   calculateTwitterLength,
-  extractUrls
+  extractUrls,
+  removeEmojis,
+  removeHashtags
 };
 

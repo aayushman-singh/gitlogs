@@ -153,6 +153,16 @@ async function processCommit(commit, repository, pusher, options = {}) {
         repoContext,
         priority: geminiClient.PRIORITY.NORMAL
       });
+      
+      // Filter out any emojis and hashtags that might have been generated (defensive approach)
+      changelogText = commitFormatter.removeEmojis(changelogText);
+      changelogText = commitFormatter.removeHashtags(changelogText);
+      
+      // Fallback to original subject if filtering resulted in empty or invalid text
+      if (!changelogText || changelogText.trim().length === 0) {
+        console.warn('⚠️  Filtered changelog is empty, using original commit subject');
+        changelogText = commitData.subject;
+      }
     }
 
     const tweetData = commitFormatter.formatTweetText(
