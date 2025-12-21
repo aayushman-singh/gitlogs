@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import { HiRefresh, HiViewList, HiSortAscending } from 'react-icons/hi';
+import { useEffect, useState, useRef } from 'react';
+import { HiRefresh, HiViewList, HiSortAscending, HiLightningBolt, HiAdjustments, HiMenu, HiChevronDown } from 'react-icons/hi';
 import { PiGithubLogoBold } from 'react-icons/pi';
 import { getMyRepos, setMyRepoOgPost, getHealth, getBackendUrl, enableRepo, disableRepo, getCurrentUser } from '../utils/api';
+import Customisation from '../components/Customisation';
 import logo from '../../gitlogs.png';
 
 export default function UserDashboard() {
@@ -13,12 +14,26 @@ export default function UserDashboard() {
   const [selectedRepo, setSelectedRepo] = useState(null);
   const [ogTweetId, setOgTweetId] = useState('');
   const [result, setResult] = useState({ type: '', message: '' });
+  const [toast, setToast] = useState({ show: false, message: '', type: 'error' });
   const [repoPage, setRepoPage] = useState(1);
   const [reposPerPage, setReposPerPage] = useState(4);
   const [sortBy, setSortBy] = useState('recent');
+  const [activeTab, setActiveTab] = useState('actions');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const menuRef = useRef(null);
 
   useEffect(() => {
     loadUserAndRepos();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setMobileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const handleGitHubLogin = () => {
@@ -55,20 +70,62 @@ export default function UserDashboard() {
     setLoading(false);
   };
 
+  // Show toast notification
+  const showToast = (message, type = 'error') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast({ show: false, message: '', type: 'error' });
+    }, 4000);
+  };
+
+  // Extract tweet ID from URL or return the ID if it's already just an ID
+  const extractTweetId = (input) => {
+    if (!input || !input.trim()) return null;
+    
+    const trimmed = input.trim();
+    
+    // If it's already just a numeric ID, return it
+    if (/^\d+$/.test(trimmed)) {
+      return trimmed;
+    }
+    
+    // Try to extract from Twitter/X URL
+    // Matches: https://twitter.com/username/status/1234567890
+    //          https://x.com/username/status/1234567890
+    //          https://twitter.com/i/status/1234567890
+    //          https://x.com/i/status/1234567890
+    const urlPattern = /(?:twitter\.com|x\.com)\/(?:\w+\/status|i\/status)\/(\d+)/i;
+    const match = trimmed.match(urlPattern);
+    
+    if (match && match[1]) {
+      return match[1];
+    }
+    
+    // If no match, return null to indicate failure
+    return null;
+  };
+
   const handleSetOgPost = async (repoFullName) => {
     if (!ogTweetId.trim()) {
-      setResult({ type: 'error', message: 'Tweet ID is required' });
+      showToast('Tweet ID or URL is required');
+      return;
+    }
+
+    const extractedId = extractTweetId(ogTweetId);
+    
+    if (!extractedId) {
+      showToast('Invalid tweet URL or ID. Please paste a valid Twitter/X URL or tweet ID.');
       return;
     }
 
     try {
-      await setMyRepoOgPost(repoFullName, ogTweetId);
+      await setMyRepoOgPost(repoFullName, extractedId);
       setResult({ type: 'success', message: `OG post set for ${repoFullName}!` });
       setSelectedRepo(null);
       setOgTweetId('');
       loadUserAndRepos();
     } catch (e) {
-      setResult({ type: 'error', message: e.message });
+      showToast(e.message || 'Failed to set OG post');
     }
   };
 
@@ -165,15 +222,9 @@ export default function UserDashboard() {
     );
   }
 
-  return (
-    <div className="container">
-
-      {result.message && (
-        <div className={`alert alert-${result.type === 'error' ? 'error' : 'success'}`}>
-          {result.type === 'error' ? '❌' : '✅'} {result.message}
-        </div>
-      )}
-
+  // Actions tab content
+  const ActionsContent = () => (
+    <>
       <div className="card mb-4">
         <div className="card-header">
           <h2 className="card-title">⚡ Quick Actions</h2>
@@ -299,16 +350,16 @@ export default function UserDashboard() {
                     {selectedRepo === repo.full_name ? (
                       <div className="mt-2">
                         <div className="form-group">
-                          <label className="form-label">Tweet ID to Quote</label>
+                          <label className="form-label">Tweet ID or URL to Quote</label>
                           <input
                             type="text"
                             className="form-input"
                             value={ogTweetId}
                             onChange={(e) => setOgTweetId(e.target.value)}
-                            placeholder="e.g., 1234567890123456789"
+                            placeholder="e.g., https://x.com/username/status/1234567890 or 1234567890"
                           />
                           <p className="text-small text-muted mt-2">
-                            Paste the tweet ID from the URL of the tweet you want all commits to quote.
+                            Paste the full Twitter/X URL or just the tweet ID. The ID will be extracted automatically.
                           </p>
                         </div>
                         <div className="quick-actions">
@@ -373,6 +424,96 @@ export default function UserDashboard() {
             </button>
           </div>
         )}
+      </div>
+    </>
+  );
+
+  const tabs = [
+    { id: 'actions', label: 'Actions', icon: HiLightningBolt },
+    { id: 'customisation', label: 'Customisation', icon: HiAdjustments }
+  ];
+
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    setMobileMenuOpen(false);
+  };
+
+  const activeTabData = tabs.find(t => t.id === activeTab);
+
+  return (
+    <div className="container">
+      {toast.show && (
+        <div className={`toast toast-${toast.type}`}>
+          {toast.message}
+        </div>
+      )}
+
+      {result.message && (
+        <div className={`alert alert-${result.type === 'error' ? 'error' : 'success'}`}>
+          {result.type === 'error' ? '❌' : '✅'} {result.message}
+        </div>
+      )}
+
+      {/* Custom Tab Navigation */}
+      <div className="dashboard-tabs">
+        {/* Desktop tabs */}
+        <ul className="dashboard-tabs-nav">
+          {tabs.map(tab => {
+            const Icon = tab.icon;
+            return (
+              <li key={tab.id}>
+                <button
+                  className={`dashboard-tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+                  onClick={() => handleTabChange(tab.id)}
+                >
+                  <span className="tab-icon"><Icon size={16} /></span>
+                  {tab.label}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+
+        {/* Mobile hamburger menu */}
+        <div className="mobile-tab-wrapper" ref={menuRef}>
+          <button 
+            className={`mobile-tab-toggle ${mobileMenuOpen ? 'open' : ''}`}
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          >
+            <HiMenu size={18} />
+            <span className="toggle-label">
+              {activeTabData && (
+                <>
+                  <activeTabData.icon size={16} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+                  {activeTabData.label}
+                </>
+              )}
+            </span>
+            <HiChevronDown size={18} className="toggle-chevron" />
+          </button>
+          
+          <div className={`mobile-tab-menu ${mobileMenuOpen ? 'open' : ''}`}>
+            {tabs.map(tab => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  className={`mobile-tab-menu-item ${activeTab === tab.id ? 'active' : ''}`}
+                  onClick={() => handleTabChange(tab.id)}
+                >
+                  <Icon size={18} />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      <div className="dashboard-tab-content">
+        {activeTab === 'actions' && <ActionsContent />}
+        {activeTab === 'customisation' && <Customisation user={user} xConnected={xConnected} />}
       </div>
     </div>
   );

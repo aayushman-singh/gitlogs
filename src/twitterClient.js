@@ -325,7 +325,43 @@ async function verifyCredentials() {
   }
 }
 
+/**
+ * Get X user info (username, profile picture, etc.)
+ */
+async function getXUserInfo() {
+  // Initialize client if not already initialized
+  if (!isInitialized) {
+    initializeTwitterClient();
+  }
+
+  if (!twitterClient) {
+    return null;
+  }
+
+  try {
+    // X API v2: GET /2/users/me - Get authenticated user with profile info
+    // username and name are default fields, profile_image_url needs to be requested
+    const response = await twitterClient.users.findMyUser({
+      'user.fields': 'profile_image_url'
+    });
+    
+    if (response.data) {
+      return {
+        username: response.data.username, // Always included by default
+        name: response.data.name, // Always included by default
+        profileImageUrl: response.data.profile_image_url || null, // Requested via user.fields
+        id: response.data.id // Always included by default
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error('❌ Failed to get X user info:', error.message || error.detail);
+    return null;
+  }
+}
+
 module.exports = {
   postTweet,
-  verifyCredentials
+  verifyCredentials,
+  getXUserInfo
 };

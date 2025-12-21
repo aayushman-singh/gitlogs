@@ -8,6 +8,7 @@ const OAuthHandler = require('./oauthHandler');
 const database = require('./database');
 const { getQueueService } = require('./queueService');
 const githubAuth = require('./githubAuth');
+const { TEMPLATE_VARIABLES, TEMPLATE_PRESETS } = require('./geminiClient');
 
 const app = express();
 
@@ -332,11 +333,24 @@ app.get('/api/me', async (req, res) => {
   // Get fresh token data after potential refresh
   const freshTokenData = database.getGithubToken(githubUserId);
   
+  // Get X/Twitter user info if connected
+  let xUserInfo = null;
+  if (database.isOAuthTokenValid()) {
+    try {
+      const { getXUserInfo } = require('./twitterClient');
+      xUserInfo = await getXUserInfo();
+    } catch (err) {
+      console.error('Failed to get X user info:', err.message);
+      // Continue without X user info
+    }
+  }
+  
   res.json({ 
     user: freshTokenData.user, 
     xConnected: database.isOAuthTokenValid(),
     tokenExpiresAt: freshTokenData.expiresAt,
-    hasRefreshToken: !!freshTokenData.refreshToken
+    hasRefreshToken: !!freshTokenData.refreshToken,
+    xUserInfo: xUserInfo
   });
 });
 
@@ -532,6 +546,114 @@ app.post('/api/me/repos/og-post', async (req, res) => {
     }
     res.status(500).json({ error: 'Failed to set OG post' });
   }
+});
+
+// ============================================
+// Prompt Template API Routes
+// ============================================
+
+// Get user's custom templates and active template
+app.get('/api/me/templates', (req, res) => {
+  const githubUserId = getGithubUserIdFromCookie(req);
+  
+  if (!githubUserId) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  
+  const userId = `github:${githubUserId}`;
+  const templates = database.getPromptTemplates(userId);
+  const activeTemplate = database.getActivePromptTemplate(userId);
+  
+  res.json({
+    templates: templates.map(t => ({
+      id: t.template_id,
+      name: t.template_name,
+      template: t.template_content,
+      isActive: t.is_active === 1,
+      createdAt: t.created_at,
+      updatedAt: t.updated_at
+    })),
+    activeTemplateId: activeTemplate ? activeTemplate.template_id : 'default'
+  });
+});
+
+// Save a custom template
+app.post('/api/me/templates', (req, res) => {
+  const githubUserId = getGithubUserIdFromCookie(req);
+  
+  if (!githubUserId) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  
+  const { templateId, templateName, templateContent } = req.body;
+  
+  if (!templateId || !templateName || !templateContent) {
+    return res.status(400).json({ error: 'templateId, templateName, and templateContent are required' });
+  }
+  
+  // Prevent overwriting preset IDs
+  if (TEMPLATE_PRESETS[templateId]) {
+    return res.status(400).json({ error: 'Cannot use a preset template ID for custom templates' });
+  }
+  
+  const userId = `github:${githubUserId}`;
+  const success = database.savePromptTemplate(userId, templateId, templateName, templateContent);
+  
+  if (!success) {
+    return res.status(500).json({ error: 'Failed to save template' });
+  }
+  
+  res.json({ success: true, templateId, templateName });
+});
+
+// Set active template (can be a preset or custom template)
+app.post('/api/me/templates/active', (req, res) => {
+  const githubUserId = getGithubUserIdFromCookie(req);
+  
+  if (!githubUserId) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  
+  const { templateId } = req.body;
+  const userId = `github:${githubUserId}`;
+  
+  // If it's a preset, save it as a custom template first
+  if (templateId && TEMPLATE_PRESETS[templateId]) {
+    const preset = TEMPLATE_PRESETS[templateId];
+    database.savePromptTemplate(userId, templateId, preset.name, preset.template);
+  }
+  
+  const success = database.setActivePromptTemplate(userId, templateId);
+  
+  if (!success) {
+    return res.status(500).json({ error: 'Failed to set active template' });
+  }
+  
+  res.json({ success: true, activeTemplateId: templateId || 'default' });
+});
+
+// Delete a custom template
+app.delete('/api/me/templates/:templateId', (req, res) => {
+  const githubUserId = getGithubUserIdFromCookie(req);
+  
+  if (!githubUserId) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  
+  const { templateId } = req.params;
+  
+  if (!templateId) {
+    return res.status(400).json({ error: 'templateId is required' });
+  }
+  
+  const userId = `github:${githubUserId}`;
+  const success = database.deletePromptTemplate(userId, templateId);
+  
+  if (!success) {
+    return res.status(500).json({ error: 'Failed to delete template' });
+  }
+  
+  res.json({ success: true });
 });
 
 // Logout
@@ -840,6 +962,14 @@ app.get('/api', (req, res) => {
 // This must be last, after all API routes and static file serving
 // Express will only reach this if no previous route matched
 app.get('*', (req, res) => {
+  // API routes that don't exist should return JSON 404, not HTML
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ 
+      error: 'Not found',
+      message: `API endpoint ${req.method} ${req.path} does not exist`
+    });
+  }
+  
   // Try frontend dist first, then public
   const indexPath = path.join(frontendPath, 'index.html');
   const publicIndex = path.join(publicPath, 'index.html');
@@ -859,6 +989,23 @@ app.get('*', (req, res) => {
         }
       });
     }
+  });
+});
+
+// Catch-all for other HTTP methods (POST, PUT, DELETE, etc.) on non-API routes
+app.use((req, res) => {
+  // API routes that don't exist should return JSON 404
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ 
+      error: 'Not found',
+      message: `API endpoint ${req.method} ${req.path} does not exist`
+    });
+  }
+  
+  // For non-API routes, return 404
+  res.status(404).json({ 
+    error: 'Not found',
+    message: `${req.method} ${req.path} does not exist`
   });
 });
 

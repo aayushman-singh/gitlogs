@@ -178,6 +178,22 @@ async function initDatabase() {
         );
 
         CREATE INDEX IF NOT EXISTS idx_github_tokens_user ON github_tokens(github_user_id);
+
+        -- Custom prompt templates per user
+        CREATE TABLE IF NOT EXISTS user_prompt_templates (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id TEXT NOT NULL,
+          template_id TEXT NOT NULL,
+          template_name TEXT NOT NULL,
+          template_content TEXT NOT NULL,
+          is_active INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(user_id, template_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_prompt_templates_user ON user_prompt_templates(user_id);
+        CREATE INDEX IF NOT EXISTS idx_prompt_templates_active ON user_prompt_templates(user_id, is_active);
       `);
       
       // Save initial state
@@ -687,6 +703,77 @@ function isUserOverQuota(userId, endpoint = 'gemini') {
   return usage >= limit;
 }
 
+// ============================================
+// Prompt Template Functions
+// ============================================
+
+function savePromptTemplate(userId, templateId, templateName, templateContent) {
+  if (!ensureDb()) return false;
+  
+  const success = run(
+    `INSERT INTO user_prompt_templates (user_id, template_id, template_name, template_content, updated_at)
+     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(user_id, template_id) DO UPDATE SET
+       template_name = excluded.template_name,
+       template_content = excluded.template_content,
+       updated_at = CURRENT_TIMESTAMP`,
+    [userId, templateId, templateName, templateContent]
+  );
+  
+  if (success) {
+    console.log(`📝 Prompt template saved for user ${userId}: ${templateId}`);
+  }
+  return success;
+}
+
+function getPromptTemplates(userId) {
+  if (!ensureDb()) return [];
+  return getAll('SELECT * FROM user_prompt_templates WHERE user_id = ? ORDER BY created_at DESC', [userId]);
+}
+
+function getActivePromptTemplate(userId) {
+  if (!ensureDb()) return null;
+  return getOne('SELECT * FROM user_prompt_templates WHERE user_id = ? AND is_active = 1', [userId]);
+}
+
+function setActivePromptTemplate(userId, templateId) {
+  if (!ensureDb()) return false;
+  
+  // First, deactivate all templates for this user
+  run('UPDATE user_prompt_templates SET is_active = 0 WHERE user_id = ?', [userId]);
+  
+  // If templateId is null or 'default', just deactivate (use default)
+  if (!templateId || templateId === 'default') {
+    console.log(`📝 Reset to default prompt template for user ${userId}`);
+    return true;
+  }
+  
+  // Activate the specified template
+  const success = run(
+    'UPDATE user_prompt_templates SET is_active = 1 WHERE user_id = ? AND template_id = ?',
+    [userId, templateId]
+  );
+  
+  if (success) {
+    console.log(`📝 Activated prompt template ${templateId} for user ${userId}`);
+  }
+  return success;
+}
+
+function deletePromptTemplate(userId, templateId) {
+  if (!ensureDb()) return false;
+  
+  const success = run(
+    'DELETE FROM user_prompt_templates WHERE user_id = ? AND template_id = ?',
+    [userId, templateId]
+  );
+  
+  if (success) {
+    console.log(`🗑️ Deleted prompt template ${templateId} for user ${userId}`);
+  }
+  return success;
+}
+
 function closeDatabase() {
   if (saveInterval) {
     clearInterval(saveInterval);
@@ -750,6 +837,13 @@ module.exports = {
   isGithubTokenValid,
   deleteGithubToken,
   getValidGithubTokenData,
+  
+  // Prompt templates
+  savePromptTemplate,
+  getPromptTemplates,
+  getActivePromptTemplate,
+  setActivePromptTemplate,
+  deletePromptTemplate,
   
   // Database management
   closeDatabase

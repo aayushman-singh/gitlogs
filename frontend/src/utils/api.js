@@ -43,10 +43,25 @@ export async function adminApiCall(endpoint, options = {}) {
     headers
   });
   
-  const data = await response.json();
+  // Check if response is JSON before parsing
+  const contentType = response.headers.get('content-type');
+  const isJson = contentType && contentType.includes('application/json');
+  
+  let data;
+  if (isJson) {
+    try {
+      data = await response.json();
+    } catch (parseError) {
+      throw new Error(`Failed to parse JSON response: ${response.status} ${response.statusText}`);
+    }
+  } else {
+    // If not JSON, read as text for error message
+    const text = await response.text();
+    throw new Error(`Server returned non-JSON response (${response.status} ${response.statusText}): ${text.substring(0, 100)}`);
+  }
   
   if (!response.ok) {
-    throw new Error(data.error || `HTTP ${response.status}`);
+    throw new Error(data.error || data.message || `HTTP ${response.status}: ${response.statusText}`);
   }
   
   return data;
@@ -65,10 +80,25 @@ export async function apiCall(endpoint, options = {}) {
     credentials: 'include' // Include cookies for session auth
   });
   
-  const data = await response.json();
+  // Check if response is JSON before parsing
+  const contentType = response.headers.get('content-type');
+  const isJson = contentType && contentType.includes('application/json');
+  
+  let data;
+  if (isJson) {
+    try {
+      data = await response.json();
+    } catch (parseError) {
+      throw new Error(`Failed to parse JSON response: ${response.status} ${response.statusText}`);
+    }
+  } else {
+    // If not JSON, read as text for error message
+    const text = await response.text();
+    throw new Error(`Server returned non-JSON response (${response.status} ${response.statusText}): ${text.substring(0, 100)}`);
+  }
   
   if (!response.ok) {
-    throw new Error(data.error || `HTTP ${response.status}`);
+    throw new Error(data.error || data.message || `HTTP ${response.status}: ${response.statusText}`);
   }
   
   return data;
@@ -155,4 +185,36 @@ export async function disableRepo(repoFullName) {
 
 export async function logout() {
   return apiCall('/auth/logout', { method: 'POST' });
+}
+
+// ============================================
+// Prompt Template API
+// ============================================
+
+// Get user's templates
+export async function getMyTemplates() {
+  return apiCall('/api/me/templates');
+}
+
+// Save a custom template
+export async function saveTemplate(templateId, templateName, templateContent) {
+  return apiCall('/api/me/templates', {
+    method: 'POST',
+    body: JSON.stringify({ templateId, templateName, templateContent })
+  });
+}
+
+// Set active template
+export async function setActiveTemplate(templateId) {
+  return apiCall('/api/me/templates/active', {
+    method: 'POST',
+    body: JSON.stringify({ templateId })
+  });
+}
+
+// Delete a custom template
+export async function deleteTemplate(templateId) {
+  return apiCall(`/api/me/templates/${encodeURIComponent(templateId)}`, {
+    method: 'DELETE'
+  });
 }

@@ -4,6 +4,184 @@ const { getQueueService, PRIORITY } = require('./queueService');
 const database = require('./database');
 const repoIndexer = require('./repoIndexer');
 
+// Default prompt template - the original one
+const DEFAULT_PROMPT_TEMPLATE = `You are a developer writing a log entry about your work. Write in a concise, technical style with bullet points.
+{{PROJECT_CONTEXT}}
+Commit Information:
+- Repository: {{REPOSITORY}}
+- Commit Type: {{COMMIT_TYPE}}
+- Commit Message: {{COMMIT_MESSAGE}}
+- Files Changed: {{FILES_CHANGED}}
+{{ADDED_FILES}}
+{{MODIFIED_FILES}}
+{{REMOVED_FILES}}
+
+CRITICAL RULES - MUST FOLLOW:
+1. ABSOLUTELY NO EMOJIS - Do not use any emojis, symbols, or special characters. Only use plain text letters, numbers, commas, periods, colons, dashes, and spaces.
+2. NO HASHTAGS - Do not include any hashtags in your output.
+3. Starts with "update:" (lowercase, with colon)
+4. Uses bullet points (dash format: "- ") to list what was changed
+5. All sentences must be lowercase
+6. Only punctuation allowed is comma "," and period "."
+7. Abbreviate most things (e.g., "implementation" -> "impl", "configuration" -> "config", "authentication" -> "auth")
+8. Talk about general changes and purpose rather than exact component or variable name changes
+9. Focus on what was done and why, not specific code details
+10. Keep it concise but informative (aim for 2-3 bullet points, maximum 150 characters total)
+11. CRITICAL: The entire output must be 150 characters or less (including "update:" and all bullet points). This is for a tweet, so brevity is essential.
+12. Use the PROJECT CONTEXT above to understand what this project is about and tailor the log entry accordingly.
+
+Example Output:
+update:
+- migrated from firebase auth to custom github oauth.
+- updated client & server for new auth service.
+
+WRONG Example (DO NOT DO THIS):
+update:
+- ✨ refactored auth flow
+- 🚀 added new features
+- #coding #github (NO HASHTAGS!)
+
+Format: Write only the log entry text, starting with "update:" followed by bullet points. No additional explanations, formatting, hashtags, or emojis. Keep it under 150 characters total. ABSOLUTELY NO EMOJIS OR HASHTAGS.`;
+
+// Available template variables for user reference
+const TEMPLATE_VARIABLES = {
+  '{{PROJECT_CONTEXT}}': 'Project context including tech stack, frameworks, and description',
+  '{{REPOSITORY}}': 'Repository name (e.g., owner/repo-name)',
+  '{{COMMIT_TYPE}}': 'Type of commit (feat, fix, refactor, etc.)',
+  '{{COMMIT_MESSAGE}}': 'Original commit message from Git',
+  '{{FILES_CHANGED}}': 'Number of files changed',
+  '{{ADDED_FILES}}': 'List of added files (if any)',
+  '{{MODIFIED_FILES}}': 'List of modified files (if any)',
+  '{{REMOVED_FILES}}': 'List of removed files (if any)',
+  '{{AUTHOR}}': 'Commit author username',
+  '{{BRANCH}}': 'Branch name where commit was pushed'
+};
+
+// Pre-built template variations
+const TEMPLATE_PRESETS = {
+  default: {
+    id: 'default',
+    name: 'Classic DevLog',
+    description: 'Concise, technical bullet points. No emojis. Under 150 chars.',
+    template: DEFAULT_PROMPT_TEMPLATE
+  },
+  casual: {
+    id: 'casual',
+    name: 'Casual Update',
+    description: 'Friendly, conversational tone with some personality.',
+    template: `You are a developer sharing what you worked on today. Be friendly and conversational.
+{{PROJECT_CONTEXT}}
+Commit Info:
+- Repo: {{REPOSITORY}}
+- Message: {{COMMIT_MESSAGE}}
+- Files Changed: {{FILES_CHANGED}}
+
+Write a brief, casual update about this commit. Be human and relatable.
+- Keep it under 200 characters total
+- Start with a casual opener like "just shipped", "working on", "pushed"
+- NO emojis or hashtags
+- Use lowercase, be informal but clear
+- Focus on the "what" and "why" in simple terms
+
+Example: just pushed some auth improvements. migrated to github oauth, much cleaner now.`
+  },
+  minimal: {
+    id: 'minimal',
+    name: 'Minimal',
+    description: 'Ultra-short, single line updates.',
+    template: `Summarize this commit in one short sentence (max 100 characters).
+{{PROJECT_CONTEXT}}
+Repo: {{REPOSITORY}}
+Message: {{COMMIT_MESSAGE}}
+Files: {{FILES_CHANGED}}
+
+Rules:
+- One sentence only, no bullet points
+- Under 100 characters
+- No emojis, no hashtags
+- Start with a verb (added, fixed, updated, refactored)
+- Be specific but brief
+
+Example: updated auth flow to use github oauth instead of firebase`
+  },
+  detailed: {
+    id: 'detailed',
+    name: 'Detailed Changelog',
+    description: 'More comprehensive update with context.',
+    template: `Write a changelog entry for this commit. Be informative but concise.
+{{PROJECT_CONTEXT}}
+Commit Details:
+- Repository: {{REPOSITORY}}
+- Type: {{COMMIT_TYPE}}
+- Message: {{COMMIT_MESSAGE}}
+- Files Changed: {{FILES_CHANGED}}
+{{ADDED_FILES}}
+{{MODIFIED_FILES}}
+{{REMOVED_FILES}}
+
+Format:
+- Start with a summary line
+- Use 2-4 bullet points for key changes
+- Keep total under 250 characters
+- NO emojis or hashtags
+- Use technical but readable language
+- Explain the impact or benefit briefly
+
+Example:
+auth system overhaul
+- migrated from firebase to direct github oauth
+- added refresh token support for persistent sessions
+- simplified client-side auth flow`
+  }
+};
+
+/**
+ * Build prompt from template with variable substitution
+ */
+function buildPromptFromTemplate(template, context, projectContext) {
+  let prompt = template;
+  
+  // Replace all template variables
+  prompt = prompt.replace(/\{\{PROJECT_CONTEXT\}\}/g, projectContext || '');
+  prompt = prompt.replace(/\{\{REPOSITORY\}\}/g, context.repository || '');
+  prompt = prompt.replace(/\{\{COMMIT_TYPE\}\}/g, context.commitType || 'change');
+  prompt = prompt.replace(/\{\{COMMIT_MESSAGE\}\}/g, context.commitMessage || '');
+  prompt = prompt.replace(/\{\{FILES_CHANGED\}\}/g, context.filesChanged?.toString() || '0');
+  prompt = prompt.replace(/\{\{AUTHOR\}\}/g, context.author || '');
+  prompt = prompt.replace(/\{\{BRANCH\}\}/g, context.branch || 'main');
+  
+  // Handle file lists
+  const addedFiles = context.addedFiles?.length > 0 
+    ? `- Added Files: ${context.addedFiles.join(', ')}` 
+    : '';
+  const modifiedFiles = context.modifiedFiles?.length > 0 
+    ? `- Modified Files: ${context.modifiedFiles.join(', ')}` 
+    : '';
+  const removedFiles = context.removedFiles?.length > 0 
+    ? `- Removed Files: ${context.removedFiles.join(', ')}` 
+    : '';
+  
+  prompt = prompt.replace(/\{\{ADDED_FILES\}\}/g, addedFiles);
+  prompt = prompt.replace(/\{\{MODIFIED_FILES\}\}/g, modifiedFiles);
+  prompt = prompt.replace(/\{\{REMOVED_FILES\}\}/g, removedFiles);
+  
+  return prompt;
+}
+
+/**
+ * Get the active prompt template for a user
+ */
+function getPromptTemplateForUser(userId) {
+  const activeTemplate = database.getActivePromptTemplate(userId);
+  
+  if (activeTemplate) {
+    return activeTemplate.template_content;
+  }
+  
+  // Return default template
+  return DEFAULT_PROMPT_TEMPLATE;
+}
+
 let genAI = null;
 let model = null;
 let queueService = null;
@@ -99,49 +277,17 @@ async function generateChangelog(commitData, repository, options = {}) {
       filesChanged: commitData.filesChanged,
       addedFiles: commitData.added || [],
       modifiedFiles: commitData.modified || [],
-      removedFiles: commitData.removed || []
+      removedFiles: commitData.removed || [],
+      author: commitData.author || '',
+      branch: commitData.branch || 'main'
     };
 
     // Build enhanced prompt with repo context
     const projectContext = buildEnhancedPrompt(commitData, repository, repoContext);
 
-    const prompt = `You are a developer writing a log entry about your work. Write in a concise, technical style with bullet points.
-${projectContext}
-Commit Information:
-- Repository: ${context.repository}
-- Commit Type: ${context.commitType || 'change'}
-- Commit Message: ${context.commitMessage}
-- Files Changed: ${context.filesChanged}
-${context.addedFiles.length > 0 ? `- Added Files: ${context.addedFiles.join(', ')}` : ''}
-${context.modifiedFiles.length > 0 ? `- Modified Files: ${context.modifiedFiles.join(', ')}` : ''}
-${context.removedFiles.length > 0 ? `- Removed Files: ${context.removedFiles.join(', ')}` : ''}
-
-CRITICAL RULES - MUST FOLLOW:
-1. ABSOLUTELY NO EMOJIS - Do not use any emojis, symbols, or special characters. Only use plain text letters, numbers, commas, periods, colons, dashes, and spaces.
-2. NO HASHTAGS - Do not include any hashtags in your output.
-3. Starts with "update:" (lowercase, with colon)
-4. Uses bullet points (dash format: "- ") to list what was changed
-5. All sentences must be lowercase
-6. Only punctuation allowed is comma "," and period "."
-7. Abbreviate most things (e.g., "implementation" -> "impl", "configuration" -> "config", "authentication" -> "auth")
-8. Talk about general changes and purpose rather than exact component or variable name changes
-9. Focus on what was done and why, not specific code details
-10. Keep it concise but informative (aim for 2-3 bullet points, maximum 150 characters total)
-11. CRITICAL: The entire output must be 150 characters or less (including "update:" and all bullet points). This is for a tweet, so brevity is essential.
-12. Use the PROJECT CONTEXT above to understand what this project is about and tailor the log entry accordingly.
-
-Example Output:
-update:
-- migrated from firebase auth to custom github oauth.
-- updated client & server for new auth service.
-
-WRONG Example (DO NOT DO THIS):
-update:
-- ✨ refactored auth flow
-- 🚀 added new features
-- #coding #github (NO HASHTAGS!)
-
-Format: Write only the log entry text, starting with "update:" followed by bullet points. No additional explanations, formatting, hashtags, or emojis. Keep it under 150 characters total. ABSOLUTELY NO EMOJIS OR HASHTAGS.`;
+    // Get user's custom template or use default
+    const promptTemplate = getPromptTemplateForUser(userId);
+    const prompt = buildPromptFromTemplate(promptTemplate, context, projectContext);
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
@@ -290,6 +436,12 @@ module.exports = {
   getQueueStats,
   getUserQuotaRemaining,
   isInitialized: () => isInitialized,
-  PRIORITY
+  PRIORITY,
+  // Template exports
+  DEFAULT_PROMPT_TEMPLATE,
+  TEMPLATE_VARIABLES,
+  TEMPLATE_PRESETS,
+  getPromptTemplateForUser,
+  buildPromptFromTemplate
 };
 
