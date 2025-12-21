@@ -38,9 +38,9 @@ const steps = [
   },
   {
     number: '02',
-    title: 'Link X Account',
-    description: 'Connect your X account so we can post on your behalf when you push code.',
-    features: ['Full control', 'Custom templates', 'Edit before post'],
+    title: 'Link Social Platforms',
+    description: 'Connect your social accounts (X and more) so we can post on your behalf when you push code.',
+    features: ['Multiple platforms', 'Custom templates', 'Edit before post'],
   },
   {
     number: '03',
@@ -256,7 +256,7 @@ export default function Home() {
 
           <div className="landing-dashboard landing-animate" style={{ '--delay': '0.3s' }}>
             <img
-              src="https://placehold.co/1200x600?text=Clean+dashboard+interface+showing+connected+GitHub+and+X+accounts+with+recent+automated+posts+timeline+dark+modern+UI"
+              src="/dashboard.png"
               alt="gitlogs dashboard showing GitHub commits automatically posted to X with engagement metrics and customization options"
             />
             <p>Your dashboard shows all automated posts and engagement.</p>

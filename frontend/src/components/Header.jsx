@@ -1,12 +1,15 @@
-import { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { getCurrentUser, getBackendUrl } from '../utils/api';
+import { useState, useEffect, useRef } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { getCurrentUser, getBackendUrl, logout } from '../utils/api';
 import logo from '../../gitlogs.png';
 import logoIcon from '../../gitlogs-icon-whitebg.png';
 
 export default function Header() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef(null);
   
   useEffect(() => {
     // Check if user is authenticated via backend
@@ -15,9 +18,45 @@ export default function Header() {
       .catch(() => setUser(null));
   }, [location.pathname]); // Re-check on route change
   
+  useEffect(() => {
+    if (!userMenuOpen) {
+      return;
+    }
+
+    const handleOutsideClick = (event) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setUserMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setUserMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [userMenuOpen]);
+  
   const handleLogin = () => {
     // Redirect to backend OAuth endpoint
     window.location.href = `${getBackendUrl()}/auth/github`;
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      setUser(null);
+      setUserMenuOpen(false);
+      navigate('/');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   };
   
   const isActive = (path) => location.pathname === path ? 'nav-link active' : 'nav-link';
@@ -33,9 +72,29 @@ export default function Header() {
           <Link to="/dashboard" className={isActive('/dashboard')}>Dashboard</Link>
           
           {user ? (
-            <div className="user-menu">
-              <img src={user.avatar_url} alt={user.login} className="user-avatar" />
-              <span className="user-name">{user.name || user.login}</span>
+            <div className="user-dropdown" ref={userMenuRef}>
+              <button
+                className="user-dropdown-trigger"
+                onClick={() => setUserMenuOpen((prev) => !prev)}
+                aria-expanded={userMenuOpen}
+                aria-haspopup="menu"
+              >
+                <img src={user.avatar_url} alt={user.login} className="user-avatar" />
+              </button>
+              {userMenuOpen && (
+                <div className="user-dropdown-menu" role="menu">
+                  <div className="user-dropdown-header">
+                    <img src={user.avatar_url} alt={user.login} className="user-dropdown-avatar" />
+                    <div className="user-dropdown-meta">
+                      <span className="user-dropdown-name">{user.name || user.login}</span>
+                      <span className="user-dropdown-handle">@{user.login}</span>
+                    </div>
+                  </div>
+                  <button className="user-dropdown-item" role="menuitem" onClick={handleLogout}>
+                    Log out
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <button onClick={handleLogin} className="btn btn-github btn-sm">

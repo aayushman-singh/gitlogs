@@ -187,18 +187,17 @@ a:hover {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
+  border: none;
+  background: transparent;
   color: var(--text-primary);
-  padding: 8px 12px;
-  border-radius: 10px;
+  padding: 4px 8px;
+  border-radius: 6px;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
+  transition: background 0.2s;
 }
 
 .user-dropdown-trigger:hover {
-  background: #1b2027;
-  border-color: #3c434d;
+  background: var(--bg-tertiary);
 }
 
 .user-dropdown-label {
@@ -466,9 +465,88 @@ a:hover {
   cursor: default;
 }
 
+.btn-x-connected {
+  border: 2px solid var(--accent-green) !important;
+  background: #000000;
+}
+
+.btn-linkedin {
+  background: #0077b5;
+  color: #fff;
+  border: 1px solid #005885;
+}
+
+.btn-linkedin:hover {
+  background: #006399;
+}
+
+.btn-linkedin-coming-soon {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-linkedin-coming-soon:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.btn-linkedin-coming-soon {
+  position: relative;
+}
+
+.btn-linkedin-coming-soon:hover::after {
+  content: 'Coming soon';
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.btn-linkedin-coming-soon:hover::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--border-color);
+  z-index: 1001;
+  pointer-events: none;
+}
+
 .btn-sm {
   padding: 6px 12px;
   font-size: 12px;
+}
+
+.btn-refresh {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.btn-refresh:hover {
+  color: var(--text-primary);
+  background: transparent;
 }
 
 .btn:disabled {
@@ -719,6 +797,100 @@ code {
   border-radius: 8px;
   padding: 16px;
   margin-bottom: 12px;
+}
+
+.repo-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px 0 8px;
+  margin-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.repo-pagination-info {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding: 0 8px;
+}
+
+.repo-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.repo-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.repo-control:hover {
+  border-color: var(--accent-blue);
+  background: var(--bg-secondary);
+}
+
+.repo-control-icon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.repo-control-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.repo-control-select {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 80px;
+  font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+}
+
+.repo-control-select:hover {
+  border-color: var(--accent-blue);
+}
+
+.repo-control-select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
+}
+
+.repo-control-select option {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+@media (max-width: 720px) {
+  .repo-controls {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  
+  .repo-control {
+    flex: 1;
+    min-width: 140px;
+  }
 }
 
 .repo-card-header {
@@ -1285,4 +1457,88 @@ code {
   .logo-mark-compact {
     display: block;
   }
+}
+
+/* Footer */
+.app-footer {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  margin-top: 60px;
+  padding: 40px 20px;
+}
+
+.footer-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.footer-social {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.footer-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.footer-social-links {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.footer-social-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  transition: all 0.2s;
+  text-decoration: none;
+}
+
+.footer-social-link:hover {
+  background: var(--border-color);
+  color: var(--text-primary);
+  border-color: var(--accent-blue);
+  transform: translateY(-2px);
+}
+
+.footer-divider {
+  width: 100%;
+  max-width: 200px;
+  height: 1px;
+  background: var(--border-color);
+}
+
+.footer-copyright {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+}
+
+.footer-link {
+  color: var(--accent-blue);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.footer-link:hover {
+  color: var(--accent-green);
+  text-decoration: underline;
 }

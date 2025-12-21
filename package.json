@@ -1,6 +1,6 @@
 {
-  "name": "git-twitter-bot",
-  "version": "2.0.0",
+  "name": "gitlogs",
+  "version": "1.0.0",
   "description": "Auto-tweet git commits with AI-generated changelogs - Multi-user commercial edition with rate limiting and queue management",
   "main": "src/server.js",
   "scripts": {

@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import { getMyRepos, setMyRepoOgPost, getHealth, getBackendUrl, enableRepo, disableRepo, getCurrentUser, logout } from '../utils/api';
+import { useEffect, useState } from 'react';
+import { HiRefresh, HiViewList, HiSortAscending } from 'react-icons/hi';
+import { PiGithubLogoBold } from 'react-icons/pi';
+import { getMyRepos, setMyRepoOgPost, getHealth, getBackendUrl, enableRepo, disableRepo, getCurrentUser } from '../utils/api';
 import logo from '../../gitlogs.png';
 
 export default function UserDashboard() {
@@ -11,53 +13,19 @@ export default function UserDashboard() {
   const [selectedRepo, setSelectedRepo] = useState(null);
   const [ogTweetId, setOgTweetId] = useState('');
   const [result, setResult] = useState({ type: '', message: '' });
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const userMenuRef = useRef(null);
+  const [repoPage, setRepoPage] = useState(1);
+  const [reposPerPage, setReposPerPage] = useState(4);
+  const [sortBy, setSortBy] = useState('recent');
 
   useEffect(() => {
     loadUserAndRepos();
   }, []);
-  
-  useEffect(() => {
-    if (!userMenuOpen) {
-      return;
-    }
-
-    const handleOutsideClick = (event) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
-        setUserMenuOpen(false);
-      }
-    };
-
-    const handleEscape = (event) => {
-      if (event.key === 'Escape') {
-        setUserMenuOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleOutsideClick);
-    document.addEventListener('keydown', handleEscape);
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [userMenuOpen]);
 
   const handleGitHubLogin = () => {
     // Redirect to backend OAuth endpoint - it handles everything
     window.location.href = `${getBackendUrl()}/auth/github`;
   };
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      setUser(null);
-      setRepos([]);
-      setUserMenuOpen(false);
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
 
   const loadUserAndRepos = async () => {
     setLoading(true);
@@ -77,6 +45,7 @@ export default function UserDashboard() {
         
         setRepos(reposData.repos || []);
         setHealth(healthData);
+        setRepoPage(1);
       }
     } catch (e) {
       // Not authenticated - that's fine, show login screen
@@ -120,6 +89,25 @@ export default function UserDashboard() {
       setResult({ type: 'error', message: e.message });
     }
   };
+
+  const sortedRepos = [...repos].sort((a, b) => {
+    if (sortBy === 'stars') {
+      return (b.stargazers_count || 0) - (a.stargazers_count || 0);
+    }
+    if (sortBy === 'name') {
+      return (a.full_name || '').localeCompare(b.full_name || '');
+    }
+    const aDate = new Date(a.pushed_at || a.updated_at || 0).getTime();
+    const bDate = new Date(b.pushed_at || b.updated_at || 0).getTime();
+    return bDate - aDate;
+  });
+
+  const totalRepoPages = Math.max(1, Math.ceil(sortedRepos.length / reposPerPage));
+  const currentRepoPage = Math.min(repoPage, totalRepoPages);
+  const pagedRepos = sortedRepos.slice(
+    (currentRepoPage - 1) * reposPerPage,
+    currentRepoPage * reposPerPage
+  );
 
   if (loading) {
     return (
@@ -179,44 +167,6 @@ export default function UserDashboard() {
 
   return (
     <div className="container">
-      <div className="card mb-4">
-        <div className="user-header-row">
-          <div className="user-header-info">
-            <img src={user.avatar_url} alt={user.login} className="user-header-avatar" />
-            <div>
-              <h2 className="user-header-name">{user.name || user.login}</h2>
-              <p className="text-muted">@{user.login}</p>
-            </div>
-          </div>
-          <div className="user-dropdown" ref={userMenuRef}>
-            <button
-              className="user-dropdown-trigger"
-              onClick={() => setUserMenuOpen((prev) => !prev)}
-              aria-expanded={userMenuOpen}
-              aria-haspopup="menu"
-            >
-              <span className="user-dropdown-label">Account</span>
-              <svg className={`user-dropdown-chevron ${userMenuOpen ? 'open' : ''}`} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6">
-                <path d="M6 8l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            {userMenuOpen && (
-              <div className="user-dropdown-menu" role="menu">
-                <div className="user-dropdown-header">
-                  <img src={user.avatar_url} alt={user.login} className="user-dropdown-avatar" />
-                  <div className="user-dropdown-meta">
-                    <span className="user-dropdown-name">{user.name || user.login}</span>
-                    <span className="user-dropdown-handle">@{user.login}</span>
-                  </div>
-                </div>
-                <button className="user-dropdown-item" role="menuitem" onClick={handleLogout}>
-                  Log out
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
 
       {result.message && (
         <div className={`alert alert-${result.type === 'error' ? 'error' : 'success'}`}>
@@ -230,7 +180,12 @@ export default function UserDashboard() {
         </div>
         <div className="quick-actions">
           {xConnected ? (
-            <button className="btn btn-x" disabled>✅ Connected to X</button>
+            <button className="btn btn-x btn-x-connected" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '6px' }}>
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+              </svg>
+              Connected to X
+            </button>
           ) : (
             <a
               href={`${getBackendUrl()}/auth/x`}
@@ -238,16 +193,68 @@ export default function UserDashboard() {
               target="_blank"
               rel="noopener noreferrer"
             >
-              🔐 Connect X Account
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '6px' }}>
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+              </svg>
+              Connect X Account
             </a>
           )}
-          <button className="btn btn-secondary" onClick={loadUserAndRepos}>🔄 Refresh</button>
+          <button
+            className="btn btn-linkedin btn-linkedin-coming-soon"
+            disabled
+            title="Coming soon"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '6px' }}>
+              <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+            </svg>
+            Connect to LinkedIn
+          </button>
+          <button className="btn btn-refresh" onClick={loadUserAndRepos} style={{ marginLeft: 'auto' }}>
+            <HiRefresh size={18} />
+          </button>
         </div>
       </div>
 
       <div className="card">
         <div className="card-header">
-          <h2 className="card-title">📁 Your Repositories</h2>
+          <h2 className="card-title">
+            <PiGithubLogoBold size={18} style={{ marginRight: '8px' }} />
+            Your Repositories
+          </h2>
+          <div className="repo-controls">
+            <label className="repo-control">
+              <HiViewList size={16} className="repo-control-icon" />
+              <span className="repo-control-label">Rows</span>
+              <select
+                className="repo-control-select"
+                value={reposPerPage}
+                onChange={(event) => {
+                  setReposPerPage(Number(event.target.value));
+                  setRepoPage(1);
+                }}
+              >
+                <option value={4}>4</option>
+                <option value={6}>6</option>
+                <option value={8}>8</option>
+              </select>
+            </label>
+            <label className="repo-control">
+              <HiSortAscending size={16} className="repo-control-icon" />
+              <span className="repo-control-label">Sort</span>
+              <select
+                className="repo-control-select"
+                value={sortBy}
+                onChange={(event) => {
+                  setSortBy(event.target.value);
+                  setRepoPage(1);
+                }}
+              >
+                <option value="recent">Most recent</option>
+                <option value="stars">Most starred</option>
+                <option value="name">Name A–Z</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         {repos.length === 0 ? (
@@ -257,7 +264,7 @@ export default function UserDashboard() {
           </div>
         ) : (
           <div>
-            {repos.map(repo => (
+            {pagedRepos.map(repo => (
               <div key={repo.id || repo.full_name} className="repo-card" style={{ opacity: repo.enabled ? 1 : 0.7 }}>
                 <div className="repo-card-header">
                   <div style={{ flex: 1 }}>
@@ -343,6 +350,27 @@ export default function UserDashboard() {
                 )}
               </div>
             ))}
+          </div>
+        )}
+        {repos.length > reposPerPage && (
+          <div className="repo-pagination">
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setRepoPage(Math.max(1, currentRepoPage - 1))}
+              disabled={currentRepoPage === 1}
+            >
+              Prev
+            </button>
+            <span className="repo-pagination-info">
+              Page {currentRepoPage} of {totalRepoPages}
+            </span>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setRepoPage(Math.min(totalRepoPages, currentRepoPage + 1))}
+              disabled={currentRepoPage === totalRepoPages}
+            >
+              Next
+            </button>
           </div>
         )}
       </div>

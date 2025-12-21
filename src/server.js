@@ -364,6 +364,9 @@ app.get('/api/me/repos', async (req, res) => {
         description: repo.description,
         html_url: repo.html_url,
         private: repo.private,
+        stargazers_count: repo.stargazers_count || 0,
+        pushed_at: repo.pushed_at,
+        updated_at: repo.updated_at,
         og_post_id: ogPostId,
         enabled: repoStatus?.enabled || false
       };
