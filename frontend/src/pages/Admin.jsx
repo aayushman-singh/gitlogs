@@ -224,7 +224,17 @@ export default function Admin() {
             {tab === 'og-posts' && '📌 OG Posts'}
             {tab === 'users' && '👥 Users'}
             {tab === 'repos' && '📁 Repositories'}
-            {tab === 'stats' && '📊 Stats'}
+            {tab === 'stats' && (
+              <>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px', marginRight: '6px' }}>
+                  <path d="M3 3v18h18" />
+                  <path d="M18 17V9" />
+                  <path d="M13 17V5" />
+                  <path d="M8 17v-3" />
+                </svg>
+                Stats
+              </>
+            )}
           </button>
         ))}
       </div>
@@ -399,7 +409,15 @@ export default function Admin() {
         <>
           <div className="card">
             <div className="card-header">
-              <h2 className="card-title">📊 System Statistics</h2>
+              <h2 className="card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px', marginRight: '8px' }}>
+                  <path d="M3 3v18h18" />
+                  <path d="M18 17V9" />
+                  <path d="M13 17V5" />
+                  <path d="M8 17v-3" />
+                </svg>
+                System Statistics
+              </h2>
               <button className="btn btn-secondary btn-sm" onClick={loadStats}>Refresh</button>
             </div>
             <pre className="json-display">{stats ? JSON.stringify(stats, null, 2) : 'Loading...'}</pre>

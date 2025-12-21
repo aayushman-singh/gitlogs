@@ -8,7 +8,7 @@ const benefits = [
     description:
       'Stop context-switching between coding and posting. gitlogs handles your social presence automatically.',
     image:
-      'https://placehold.co/600x400?text=Developer+focused+on+coding+with+dual+monitors+showing+clean+IDE+interface+dark+theme',
+      '/img1.png',
     icon: 'clock',
   },
   {
@@ -16,7 +16,7 @@ const benefits = [
     description:
       'Every commit becomes a post. Build your developer brand and showcase your consistency without lifting a finger.',
     image:
-      'https://placehold.co/600x400?text=Analytics+dashboard+showing+upward+trending+graphs+and+engagement+metrics+modern+dark+UI',
+      '/img2.png',
     icon: 'trend',
   },
   {
@@ -24,7 +24,7 @@ const benefits = [
     description:
       'Connect once, forget forever. Your commits automatically transform into engaging posts that attract opportunities.',
     image:
-      'https://placehold.co/600x400?text=Automated+workflow+visualization+with+GitHub+and+X+logos+connected+by+smooth+gradient+lines',
+      '/img3.png',
     icon: 'zap',
   },
 ];

@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { getCurrentUser, getBackendUrl, logout } from '../utils/api';
+import { Link, useLocation } from 'react-router-dom';
+import { getCurrentUser, getBackendUrl } from '../utils/api';
 import logo from '../../gitlogs.png';
 import logoIcon from '../../gitlogs-icon-whitebg.png';
 
 export default function Header() {
   const location = useLocation();
-  const navigate = useNavigate();
   const [user, setUser] = useState(null);
   
   useEffect(() => {
@@ -21,16 +20,6 @@ export default function Header() {
     window.location.href = `${getBackendUrl()}/auth/github`;
   };
   
-  const handleLogout = async () => {
-    try {
-      await logout();
-      setUser(null);
-      navigate('/');
-    } catch (e) {
-      console.error('Logout failed:', e);
-    }
-  };
-  
   const isActive = (path) => location.pathname === path ? 'nav-link active' : 'nav-link';
   
   return (
@@ -41,14 +30,12 @@ export default function Header() {
           <img src={logoIcon} alt="GitLogs icon" className="logo-mark logo-mark-compact" />
         </Link>
         <nav className="nav">
-          <Link to="/" className={isActive('/')}>Home</Link>
           <Link to="/dashboard" className={isActive('/dashboard')}>Dashboard</Link>
           
           {user ? (
             <div className="user-menu">
               <img src={user.avatar_url} alt={user.login} className="user-avatar" />
               <span className="user-name">{user.name || user.login}</span>
-              <button className="btn btn-secondary btn-sm" onClick={handleLogout}>Logout</button>
             </div>
           ) : (
             <button onClick={handleLogin} className="btn btn-github btn-sm">

@@ -100,24 +100,6 @@ export default function Dashboard() {
   return (
     <>
       <div className="container">
-        <div className="card mb-4" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <h2 style={{ marginBottom: 4 }}>Dashboard</h2>
-            <p className="text-muted">@{authUser.login}</p>
-          </div>
-          <div className="quick-actions">
-            {isAdmin && (
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => setMode(mode === 'admin' ? 'user' : 'admin')}
-              >
-                Switch to {mode === 'admin' ? 'User' : 'Admin'} Mode
-              </button>
-            )}
-            <button className="btn btn-secondary btn-sm" onClick={handleLogout}>Sign out</button>
-          </div>
-        </div>
-
         {authError && (
           <div className="alert alert-error">❌ {authError}</div>
         )}

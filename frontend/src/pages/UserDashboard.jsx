@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getMyRepos, setMyRepoOgPost, getHealth, getBackendUrl, enableRepo, disableRepo, getCurrentUser, logout } from '../utils/api';
 import logo from '../../gitlogs.png';
 
@@ -11,10 +11,37 @@ export default function UserDashboard() {
   const [selectedRepo, setSelectedRepo] = useState(null);
   const [ogTweetId, setOgTweetId] = useState('');
   const [result, setResult] = useState({ type: '', message: '' });
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef(null);
 
   useEffect(() => {
     loadUserAndRepos();
   }, []);
+  
+  useEffect(() => {
+    if (!userMenuOpen) {
+      return;
+    }
+
+    const handleOutsideClick = (event) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setUserMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setUserMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [userMenuOpen]);
 
   const handleGitHubLogin = () => {
     // Redirect to backend OAuth endpoint - it handles everything
@@ -26,6 +53,7 @@ export default function UserDashboard() {
       await logout();
       setUser(null);
       setRepos([]);
+      setUserMenuOpen(false);
     } catch (error) {
       console.error('Logout error:', error);
     }
@@ -151,18 +179,42 @@ export default function UserDashboard() {
 
   return (
     <div className="container">
-      <h1 className="section-title">📊 Dashboard</h1>
-
       <div className="card mb-4">
-        <div className="flex gap-4" style={{ alignItems: 'center', justifyContent: 'space-between' }}>
-          <div className="flex gap-4" style={{ alignItems: 'center' }}>
-            <img src={user.avatar_url} alt={user.login} style={{ width: 64, height: 64, borderRadius: '50%' }} />
+        <div className="user-header-row">
+          <div className="user-header-info">
+            <img src={user.avatar_url} alt={user.login} className="user-header-avatar" />
             <div>
-              <h2 style={{ marginBottom: 4 }}>{user.name || user.login}</h2>
+              <h2 className="user-header-name">{user.name || user.login}</h2>
               <p className="text-muted">@{user.login}</p>
             </div>
           </div>
-          <button onClick={handleLogout} className="btn btn-secondary btn-sm">Logout</button>
+          <div className="user-dropdown" ref={userMenuRef}>
+            <button
+              className="user-dropdown-trigger"
+              onClick={() => setUserMenuOpen((prev) => !prev)}
+              aria-expanded={userMenuOpen}
+              aria-haspopup="menu"
+            >
+              <span className="user-dropdown-label">Account</span>
+              <svg className={`user-dropdown-chevron ${userMenuOpen ? 'open' : ''}`} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6">
+                <path d="M6 8l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            {userMenuOpen && (
+              <div className="user-dropdown-menu" role="menu">
+                <div className="user-dropdown-header">
+                  <img src={user.avatar_url} alt={user.login} className="user-dropdown-avatar" />
+                  <div className="user-dropdown-meta">
+                    <span className="user-dropdown-name">{user.name || user.login}</span>
+                    <span className="user-dropdown-handle">@{user.login}</span>
+                  </div>
+                </div>
+                <button className="user-dropdown-item" role="menuitem" onClick={handleLogout}>
+                  Log out
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
