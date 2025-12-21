@@ -13,6 +13,8 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    emptyOutDir: true
+    emptyOutDir: true,
+    // Copy _redirects from public folder for SPA routing on static hosts
+    copyPublicDir: true
   }
 });

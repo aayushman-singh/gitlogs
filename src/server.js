@@ -12,10 +12,11 @@ const githubAuth = require('./githubAuth');
 const app = express();
 
 // Serve static files from frontend dist (production) or public (fallback)
+// fallthrough: true ensures requests for non-existent files pass to next middleware (for SPA routing)
 const frontendPath = path.join(__dirname, '../frontend/dist');
 const publicPath = path.join(__dirname, '../public');
-app.use(express.static(frontendPath));
-app.use(express.static(publicPath));
+app.use(express.static(frontendPath, { fallthrough: true }));
+app.use(express.static(publicPath, { fallthrough: true }));
 
 // In-memory store for PKCE verifiers and GitHub OAuth state
 const pkceStore = new Map();
@@ -833,16 +834,25 @@ app.get('/api', (req, res) => {
 });
 
 // SPA fallback - serve index.html for client-side routing
+// This must be last, after all API routes and static file serving
+// Express will only reach this if no previous route matched
 app.get('*', (req, res) => {
   // Try frontend dist first, then public
   const indexPath = path.join(frontendPath, 'index.html');
   const publicIndex = path.join(publicPath, 'index.html');
   
+  // Try to send frontend dist index.html first
   res.sendFile(indexPath, (err) => {
     if (err) {
+      // If frontend dist doesn't exist, try public folder
       res.sendFile(publicIndex, (err2) => {
         if (err2) {
-          res.status(404).json({ error: 'Not found' });
+          // If neither exists, return 404
+          console.error('Failed to serve index.html:', err2.message);
+          res.status(404).json({ 
+            error: 'Frontend not found', 
+            message: 'Please ensure the frontend is built and index.html exists.' 
+          });
         }
       });
     }
