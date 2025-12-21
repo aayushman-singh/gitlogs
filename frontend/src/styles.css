@@ -94,9 +94,11 @@ a:hover {
 
 .logo-mark-compact {
   display: none;
-  transform: scale(3);
-  transform-origin: left center;
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
   filter: none;
+  transform: none;
 }
 
 .logo-mark-sm {
@@ -536,17 +538,23 @@ a:hover {
   background: transparent;
   border: none;
   color: var(--text-secondary);
-  padding: 8px;
+  padding: 4px 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: color 0.2s;
+  margin-left: auto;
 }
 
 .btn-refresh:hover {
   color: var(--text-primary);
   background: transparent;
+}
+
+.btn-connect {
+  min-width: 180px;
+  justify-content: center;
 }
 
 .btn:disabled {
@@ -890,6 +898,46 @@ code {
   .repo-control {
     flex: 1;
     min-width: 140px;
+  }
+}
+
+@media (max-width: 480px) {
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .card-title {
+    font-size: 14px;
+  }
+  
+  .repo-controls {
+    gap: 6px;
+    width: 100%;
+  }
+  
+  .repo-control {
+    padding: 4px 8px;
+    gap: 6px;
+    min-width: auto;
+    flex: 0 1 auto;
+  }
+  
+  .repo-control-icon {
+    width: 14px !important;
+    height: 14px !important;
+    flex-shrink: 0;
+  }
+  
+  .repo-control-label {
+    font-size: 11px;
+  }
+  
+  .repo-control-select {
+    padding: 3px 6px;
+    font-size: 11px;
+    min-width: 50px;
   }
 }
 
@@ -1456,6 +1504,9 @@ code {
 
   .logo-mark-compact {
     display: block;
+    width: 32px;
+    height: 32px;
+    transform: none;
   }
 }
 
