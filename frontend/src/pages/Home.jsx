@@ -1,7 +1,5 @@
-import { Link, useNavigate } from 'react-router-dom';
-import { signInWithPopup } from 'firebase/auth';
-import { auth, githubProvider, GithubAuthProvider } from '../firebase';
-import { registerGithubToken } from '../utils/api';
+import { Link } from 'react-router-dom';
+import { getBackendUrl } from '../utils/api';
 import logo from '../../gitlogs.png';
 
 const benefits = [
@@ -149,25 +147,9 @@ const icons = {
 };
 
 export default function Home() {
-  const navigate = useNavigate();
-
-  const handleGetStarted = async () => {
-    try {
-      const result = await signInWithPopup(auth, githubProvider);
-      const credential = GithubAuthProvider.credentialFromResult(result);
-      const githubToken = credential?.accessToken;
-      
-      if (githubToken) {
-        try {
-          await registerGithubToken(githubToken);
-        } catch (e) {
-          console.warn('Failed to register GitHub token:', e);
-        }
-      }
-      navigate('/dashboard');
-    } catch (error) {
-      console.error('GitHub sign-in failed:', error);
-    }
+  const handleGetStarted = () => {
+    // Redirect to backend OAuth endpoint
+    window.location.href = `${getBackendUrl()}/auth/github`;
   };
 
   return (

@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
-import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import Admin from './Admin';
 import UserDashboard from './UserDashboard';
-import { auth, githubProvider, GithubAuthProvider } from '../firebase';
-import { registerGithubToken } from '../utils/api';
+import { getCurrentUser, getBackendUrl, logout } from '../utils/api';
 import logo from '../../gitlogs.png';
 
 export default function Dashboard() {
@@ -14,63 +12,51 @@ export default function Dashboard() {
   const [mode, setMode] = useState('user');
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setAuthLoading(true);
-      setAuthUser(user || null);
-      setAuthError('');
-
-      if (user) {
-        try {
-          const tokenResult = await user.getIdTokenResult();
-          const adminClaim = Boolean(tokenResult?.claims?.admin);
-          setIsAdmin(adminClaim);
-          if (!adminClaim) {
-            setMode('user');
-          }
-        } catch (error) {
-          console.error('Failed to load auth claims:', error);
-          setAuthError('Unable to load permissions. Try signing in again.');
-          setIsAdmin(false);
-          setMode('user');
-        }
-      } else {
-        setIsAdmin(false);
-        setMode('user');
-      }
-
-      setAuthLoading(false);
-    });
-
-    return () => unsubscribe();
+    checkAuth();
+    
+    // Check for auth callback messages in URL
+    const params = new URLSearchParams(window.location.search);
+    const authSuccess = params.get('auth');
+    const error = params.get('error');
+    
+    if (authSuccess === 'success') {
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (error) {
+      setAuthError(decodeURIComponent(error));
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }, []);
 
-  const handleLogin = async () => {
-    setAuthError('');
+  const checkAuth = async () => {
+    setAuthLoading(true);
     try {
-      const result = await signInWithPopup(auth, githubProvider);
-      // Get GitHub access token from the credential
-      const credential = GithubAuthProvider.credentialFromResult(result);
-      const githubToken = credential?.accessToken;
-      
-      if (githubToken) {
-        // Send token to backend to store for repo access
-        try {
-          await registerGithubToken(githubToken);
-        } catch (e) {
-          console.warn('Failed to register GitHub token with backend:', e);
-        }
+      const userData = await getCurrentUser();
+      if (userData?.user) {
+        setAuthUser(userData.user);
+        // Check for admin (you can add admin flag to user data if needed)
+        setIsAdmin(false); // TODO: implement admin check if needed
+      } else {
+        setAuthUser(null);
       }
     } catch (error) {
-      console.error('GitHub sign-in failed:', error);
-      setAuthError('Sign-in failed. Please try again.');
+      // Not authenticated
+      setAuthUser(null);
     }
+    setAuthLoading(false);
+  };
+
+  const handleLogin = () => {
+    // Redirect to backend OAuth endpoint
+    window.location.href = `${getBackendUrl()}/auth/github`;
   };
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await logout();
+      setAuthUser(null);
     } catch (error) {
-      console.error('Firebase sign-out failed:', error);
+      console.error('Logout failed:', error);
     }
   };
 
@@ -117,7 +103,7 @@ export default function Dashboard() {
         <div className="card mb-4" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <h2 style={{ marginBottom: 4 }}>Dashboard</h2>
-            <p className="text-muted">{authUser.displayName || authUser.email || authUser.uid}</p>
+            <p className="text-muted">@{authUser.login}</p>
           </div>
           <div className="quick-actions">
             {isAdmin && (

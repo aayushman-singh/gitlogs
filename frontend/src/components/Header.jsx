@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
-import { auth, githubProvider, GithubAuthProvider } from '../firebase';
-import { registerGithubToken } from '../utils/api';
+import { getCurrentUser, getBackendUrl, logout } from '../utils/api';
 import logo from '../../gitlogs.png';
 import logoIcon from '../../gitlogs-icon-whitebg.png';
 
@@ -12,34 +10,20 @@ export default function Header() {
   const [user, setUser] = useState(null);
   
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
-    });
-    return () => unsubscribe();
-  }, []);
+    // Check if user is authenticated via backend
+    getCurrentUser()
+      .then(data => setUser(data?.user || null))
+      .catch(() => setUser(null));
+  }, [location.pathname]); // Re-check on route change
   
-  const handleLogin = async () => {
-    try {
-      const result = await signInWithPopup(auth, githubProvider);
-      const credential = GithubAuthProvider.credentialFromResult(result);
-      const githubToken = credential?.accessToken;
-      
-      if (githubToken) {
-        try {
-          await registerGithubToken(githubToken);
-        } catch (e) {
-          console.warn('Failed to register GitHub token:', e);
-        }
-      }
-      navigate('/dashboard');
-    } catch (error) {
-      console.error('GitHub sign-in failed:', error);
-    }
+  const handleLogin = () => {
+    // Redirect to backend OAuth endpoint
+    window.location.href = `${getBackendUrl()}/auth/github`;
   };
   
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await logout();
       setUser(null);
       navigate('/');
     } catch (e) {
@@ -62,8 +46,8 @@ export default function Header() {
           
           {user ? (
             <div className="user-menu">
-              <img src={user.photoURL} alt={user.displayName} className="user-avatar" />
-              <span className="user-name">{user.displayName}</span>
+              <img src={user.avatar_url} alt={user.login} className="user-avatar" />
+              <span className="user-name">{user.name || user.login}</span>
               <button className="btn btn-secondary btn-sm" onClick={handleLogout}>Logout</button>
             </div>
           ) : (

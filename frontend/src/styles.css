@@ -320,6 +320,23 @@ a:hover {
   background: #32383f;
 }
 
+.btn-x {
+  background: #000000;
+  color: #fff;
+  border: 1px solid #333;
+}
+
+.btn-x:hover {
+  background: #1a1a1a;
+}
+
+.btn-x:disabled {
+  background: #000000;
+  color: #fff;
+  opacity: 1;
+  cursor: default;
+}
+
 .btn-sm {
   padding: 6px 12px;
   font-size: 12px;

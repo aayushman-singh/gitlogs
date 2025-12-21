@@ -1,63 +1,26 @@
 /**
- * GitHub OAuth Handler for User Authentication
+ * GitHub OAuth Handler with Refresh Token Support
  * 
- * Allows users to login with GitHub to manage their repositories
- * and set OG posts for tweet quoting.
+ * Handles GitHub OAuth flow with automatic token refresh.
+ * Tokens are stored in the database for persistence.
+ * 
+ * Requirements:
+ * - GitHub App with "Expire user authorization tokens" enabled
+ * - GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in .env
  */
 
 const crypto = require('crypto');
 const config = require('../config/config');
+const database = require('./database');
 
-// In-memory session store (use Redis in production)
-const sessions = new Map();
-const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
-
-/**
- * Generate a secure session ID
- */
-function generateSessionId() {
-  return crypto.randomBytes(32).toString('hex');
-}
+// Token expiration buffer - refresh 10 minutes before expiry
+const TOKEN_REFRESH_BUFFER_MS = 10 * 60 * 1000;
 
 /**
- * Create a new session for a user
+ * Generate a secure random string
  */
-function createSession(user, accessToken) {
-  const sessionId = generateSessionId();
-  const session = {
-    user,
-    accessToken,
-    createdAt: Date.now(),
-    expiresAt: Date.now() + SESSION_DURATION
-  };
-  
-  sessions.set(sessionId, session);
-  return sessionId;
-}
-
-/**
- * Get session by ID
- */
-function getSession(sessionId) {
-  if (!sessionId) return null;
-  
-  const session = sessions.get(sessionId);
-  if (!session) return null;
-  
-  // Check if expired
-  if (Date.now() > session.expiresAt) {
-    sessions.delete(sessionId);
-    return null;
-  }
-  
-  return session;
-}
-
-/**
- * Delete a session (logout)
- */
-function deleteSession(sessionId) {
-  sessions.delete(sessionId);
+function generateSecureToken(bytes = 32) {
+  return crypto.randomBytes(bytes).toString('hex');
 }
 
 /**
@@ -78,15 +41,15 @@ function getAuthUrl(state) {
  * Get callback URL
  */
 function getCallbackUrl() {
-  // Use API_BASE_URL for the callback since OAuth redirects back to the API
   const baseUrl = process.env.API_BASE_URL || process.env.BASE_URL || `http://localhost:${config.server.port}`;
   return `${baseUrl}/auth/github/callback`;
 }
 
 /**
- * Exchange authorization code for access token
+ * Exchange authorization code for tokens (access + refresh)
+ * GitHub Apps return both access_token and refresh_token
  */
-async function exchangeCodeForToken(code) {
+async function exchangeCodeForTokens(code) {
   const response = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
     headers: {
@@ -106,7 +69,109 @@ async function exchangeCodeForToken(code) {
     throw new Error(data.error_description || data.error);
   }
   
-  return data.access_token;
+  // GitHub Apps return: access_token, expires_in, refresh_token, refresh_token_expires_in
+  // Classic OAuth Apps only return: access_token (no expiry)
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token || null,
+    expiresIn: data.expires_in || null, // seconds until access token expires
+    refreshTokenExpiresIn: data.refresh_token_expires_in || null,
+    tokenType: data.token_type || 'bearer',
+    scope: data.scope
+  };
+}
+
+/**
+ * Refresh an access token using the refresh token
+ */
+async function refreshAccessToken(refreshToken) {
+  console.log('🔄 Refreshing GitHub access token...');
+  
+  const response = await fetch('https://github.com/login/oauth/access_token', {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      client_id: config.github.clientId,
+      client_secret: config.github.clientSecret,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken
+    })
+  });
+  
+  const data = await response.json();
+  
+  if (data.error) {
+    console.error('❌ Token refresh failed:', data.error_description || data.error);
+    throw new Error(data.error_description || data.error);
+  }
+  
+  console.log('✅ GitHub access token refreshed successfully');
+  
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token || refreshToken, // New refresh token or keep old one
+    expiresIn: data.expires_in || null,
+    refreshTokenExpiresIn: data.refresh_token_expires_in || null,
+    tokenType: data.token_type || 'bearer',
+    scope: data.scope
+  };
+}
+
+/**
+ * Get a valid access token for a user, refreshing if necessary
+ * This is the main function to call when you need to make GitHub API requests
+ */
+async function getValidAccessToken(githubUserId) {
+  const tokenData = database.getGithubToken(githubUserId);
+  
+  if (!tokenData) {
+    return null;
+  }
+  
+  // Check if token is expired or about to expire
+  if (tokenData.expiresAt) {
+    const expiresAt = new Date(tokenData.expiresAt).getTime();
+    const now = Date.now();
+    
+    // If token is expired or will expire soon, try to refresh
+    if (now >= expiresAt - TOKEN_REFRESH_BUFFER_MS) {
+      if (tokenData.refreshToken) {
+        try {
+          const newTokens = await refreshAccessToken(tokenData.refreshToken);
+          
+          // Calculate new expiration time
+          const newExpiresAt = newTokens.expiresIn 
+            ? new Date(Date.now() + newTokens.expiresIn * 1000)
+            : null;
+          
+          // Update stored tokens
+          database.storeGithubToken(
+            githubUserId,
+            newTokens.accessToken,
+            tokenData.user,
+            newExpiresAt,
+            newTokens.refreshToken
+          );
+          
+          return newTokens.accessToken;
+        } catch (error) {
+          console.error(`❌ Failed to refresh token for user ${githubUserId}:`, error.message);
+          // Token refresh failed - user needs to re-authenticate
+          return null;
+        }
+      } else {
+        // No refresh token and access token expired
+        console.log(`⚠️ Token expired for user ${githubUserId} and no refresh token available`);
+        return null;
+      }
+    }
+  }
+  
+  // Token is still valid
+  return tokenData.token;
 }
 
 /**
@@ -122,6 +187,10 @@ async function getGitHubUser(accessToken) {
   });
   
   if (!response.ok) {
+    const status = response.status;
+    if (status === 401) {
+      throw new Error('Token expired or invalid');
+    }
     throw new Error('Failed to get user info');
   }
   
@@ -129,9 +198,37 @@ async function getGitHubUser(accessToken) {
 }
 
 /**
- * Get user's repositories
+ * Get user's repositories with automatic token refresh
  */
-async function getUserRepos(accessToken) {
+async function getUserRepos(githubUserId) {
+  const accessToken = await getValidAccessToken(githubUserId);
+  
+  if (!accessToken) {
+    throw new Error('No valid access token available');
+  }
+  
+  const response = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated', {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'GitLogs-Bot'
+    }
+  });
+  
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('Token expired');
+    }
+    throw new Error('Failed to get repositories');
+  }
+  
+  return response.json();
+}
+
+/**
+ * Get user's repositories using a provided token (for initial auth)
+ */
+async function getUserReposWithToken(accessToken) {
   const response = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated', {
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -150,9 +247,15 @@ async function getUserRepos(accessToken) {
 /**
  * Create a webhook on a repository
  */
-async function createWebhook(accessToken, repoFullName, webhookUrl, webhookSecret) {
+async function createWebhook(githubUserId, repoFullName, webhookUrl, webhookSecret) {
+  const accessToken = await getValidAccessToken(githubUserId);
+  
+  if (!accessToken) {
+    throw new Error('No valid access token available');
+  }
+  
   // First check if webhook already exists
-  const existingHooks = await getWebhooks(accessToken, repoFullName);
+  const existingHooks = await getWebhooksWithToken(accessToken, repoFullName);
   const existingHook = existingHooks.find(h => h.config?.url === webhookUrl);
   
   if (existingHook) {
@@ -192,9 +295,9 @@ async function createWebhook(accessToken, repoFullName, webhookUrl, webhookSecre
 }
 
 /**
- * Get webhooks for a repository
+ * Get webhooks for a repository using token
  */
-async function getWebhooks(accessToken, repoFullName) {
+async function getWebhooksWithToken(accessToken, repoFullName) {
   const response = await fetch(`https://api.github.com/repos/${repoFullName}/hooks`, {
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -204,7 +307,6 @@ async function getWebhooks(accessToken, repoFullName) {
   });
   
   if (!response.ok) {
-    // If 404, user might not have admin access - return empty array
     if (response.status === 404) {
       return [];
     }
@@ -217,8 +319,14 @@ async function getWebhooks(accessToken, repoFullName) {
 /**
  * Delete a webhook from a repository
  */
-async function deleteWebhook(accessToken, repoFullName, webhookUrl) {
-  const hooks = await getWebhooks(accessToken, repoFullName);
+async function deleteWebhook(githubUserId, repoFullName, webhookUrl) {
+  const accessToken = await getValidAccessToken(githubUserId);
+  
+  if (!accessToken) {
+    throw new Error('No valid access token available');
+  }
+  
+  const hooks = await getWebhooksWithToken(accessToken, repoFullName);
   const hook = hooks.find(h => h.config?.url === webhookUrl);
   
   if (!hook) {
@@ -255,21 +363,21 @@ function getSessionFromCookie(cookieHeader) {
     return acc;
   }, {});
   
-  return cookies.session_id || null;
+  return cookies.github_user_id || null;
 }
 
 module.exports = {
-  createSession,
-  getSession,
-  deleteSession,
+  generateSecureToken,
   getAuthUrl,
   getCallbackUrl,
-  exchangeCodeForToken,
+  exchangeCodeForTokens,
+  refreshAccessToken,
+  getValidAccessToken,
   getGitHubUser,
   getUserRepos,
-  getSessionFromCookie,
-  generateSessionId,
+  getUserReposWithToken,
   createWebhook,
   deleteWebhook,
-  getWebhooks
+  getWebhooksWithToken,
+  getSessionFromCookie
 };

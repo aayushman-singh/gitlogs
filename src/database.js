@@ -164,6 +164,20 @@ async function initDatabase() {
         );
 
         CREATE INDEX IF NOT EXISTS idx_og_posts_repo ON og_posts(repo_name);
+
+        -- GitHub user tokens for persistent storage with refresh token support
+        CREATE TABLE IF NOT EXISTS github_tokens (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          github_user_id TEXT UNIQUE NOT NULL,
+          access_token TEXT NOT NULL,
+          refresh_token TEXT,
+          user_json TEXT NOT NULL,
+          expires_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_github_tokens_user ON github_tokens(github_user_id);
       `);
       
       // Save initial state
@@ -527,6 +541,108 @@ function isRepoContextStale(repoFullName, maxAgeHours = 24) {
 }
 
 // ============================================
+// GitHub Token Functions (persistent storage with refresh token support)
+// ============================================
+
+function storeGithubToken(githubUserId, accessToken, user, expiresAt = null, refreshToken = null) {
+  if (!ensureDb()) {
+    console.warn('⚠️ Database not ready, cannot store GitHub token');
+    return false;
+  }
+  
+  try {
+    // expiresAt can be null for classic OAuth apps (tokens don't expire)
+    const expiry = expiresAt ? new Date(expiresAt).toISOString() : null;
+    
+    run(
+      `INSERT INTO github_tokens (github_user_id, access_token, refresh_token, user_json, expires_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(github_user_id) DO UPDATE SET
+         access_token = excluded.access_token,
+         refresh_token = COALESCE(excluded.refresh_token, github_tokens.refresh_token),
+         user_json = excluded.user_json,
+         expires_at = excluded.expires_at,
+         updated_at = CURRENT_TIMESTAMP`,
+      [githubUserId, accessToken, refreshToken, JSON.stringify(user), expiry]
+    );
+    
+    const hasRefresh = refreshToken ? ' (with refresh token)' : ' (no refresh token - classic OAuth)';
+    console.log(`💾 GitHub token stored for user: ${user.login || githubUserId}${hasRefresh}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Error storing GitHub token:', error);
+    return false;
+  }
+}
+
+function getGithubToken(githubUserId) {
+  if (!ensureDb()) {
+    return null;
+  }
+  
+  const row = getOne(
+    'SELECT * FROM github_tokens WHERE github_user_id = ?',
+    [githubUserId]
+  );
+  
+  if (!row) return null;
+  
+  return {
+    token: row.access_token,
+    refreshToken: row.refresh_token,
+    user: JSON.parse(row.user_json),
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function isGithubTokenExpired(githubUserId) {
+  const tokenData = getGithubToken(githubUserId);
+  if (!tokenData) return true;
+  
+  // If no expiry set (classic OAuth), token never expires
+  if (!tokenData.expiresAt) {
+    return false;
+  }
+  
+  const expiresAt = new Date(tokenData.expiresAt);
+  const now = new Date();
+  return now >= expiresAt;
+}
+
+function hasValidGithubToken(githubUserId) {
+  const tokenData = getGithubToken(githubUserId);
+  if (!tokenData) return false;
+  
+  // If token is expired but we have a refresh token, it's still "valid" (refreshable)
+  if (isGithubTokenExpired(githubUserId)) {
+    return !!tokenData.refreshToken;
+  }
+  
+  return true;
+}
+
+function deleteGithubToken(githubUserId) {
+  if (!ensureDb()) return false;
+  
+  const success = run('DELETE FROM github_tokens WHERE github_user_id = ?', [githubUserId]);
+  if (success) {
+    console.log(`🗑️ GitHub token deleted for user: ${githubUserId}`);
+  }
+  return success;
+}
+
+// Alias for backward compatibility
+function getValidGithubTokenData(githubUserId) {
+  return getGithubToken(githubUserId);
+}
+
+function isGithubTokenValid(githubUserId) {
+  return hasValidGithubToken(githubUserId);
+}
+
+// ============================================
 // API Usage Tracking Functions
 // ============================================
 
@@ -627,6 +743,13 @@ module.exports = {
   trackApiUsage,
   getApiUsage,
   isUserOverQuota,
+  
+  // GitHub token storage
+  storeGithubToken,
+  getGithubToken,
+  isGithubTokenValid,
+  deleteGithubToken,
+  getValidGithubTokenData,
   
   // Database management
   closeDatabase

@@ -123,14 +123,6 @@ export async function getRepoContext(owner, repo) {
   return adminApiCall(`/api/repos/${owner}/${repo}/context`);
 }
 
-// Register GitHub token from Firebase auth (for repo access)
-export async function registerGithubToken(githubToken) {
-  return apiCall('/api/me/github-token', {
-    method: 'POST',
-    body: JSON.stringify({ githubToken })
-  });
-}
-
 // User API (authenticated user data)
 export async function getCurrentUser() {
   return apiCall('/api/me');

@@ -200,6 +200,7 @@ app.use(cors({
 
 // ============================================
 // GitHub OAuth Routes (User Authentication)
+// Direct OAuth with refresh token support - no Firebase needed
 // ============================================
 
 // Start GitHub OAuth flow
@@ -208,14 +209,22 @@ app.get('/auth/github', (req, res) => {
     return res.status(500).json({ error: 'GitHub OAuth not configured. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.' });
   }
   
-  const state = githubAuth.generateSessionId();
+  const state = githubAuth.generateSecureToken();
   githubStateStore.set(state, Date.now());
+  
+  // Clean up old states (older than 10 minutes)
+  const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+  for (const [key, timestamp] of githubStateStore.entries()) {
+    if (timestamp < tenMinutesAgo) {
+      githubStateStore.delete(key);
+    }
+  }
   
   const authUrl = githubAuth.getAuthUrl(state);
   res.redirect(authUrl);
 });
 
-// GitHub OAuth callback
+// GitHub OAuth callback - exchanges code for tokens (including refresh token)
 app.get('/auth/github/callback', async (req, res) => {
   const { code, state, error } = req.query;
   
@@ -235,79 +244,27 @@ app.get('/auth/github/callback', async (req, res) => {
   githubStateStore.delete(state);
   
   try {
-    // Exchange code for token
-    const accessToken = await githubAuth.exchangeCodeForToken(code);
+    // Exchange code for tokens (access + refresh)
+    const tokens = await githubAuth.exchangeCodeForTokens(code);
     
     // Get user info
-    const user = await githubAuth.getGitHubUser(accessToken);
+    const user = await githubAuth.getGitHubUser(tokens.accessToken);
     
-    // Create session
-    const sessionId = githubAuth.createSession(user, accessToken);
+    // Calculate expiration time (if provided by GitHub)
+    // GitHub Apps: tokens expire in ~8 hours
+    // Classic OAuth: tokens don't expire (expiresIn will be null)
+    const expiresAt = tokens.expiresIn 
+      ? new Date(Date.now() + tokens.expiresIn * 1000)
+      : null;
     
-    // Also create/update user in database
-    database.upsertUser({
-      userId: `github:${user.id}`,
-      githubUsername: user.login,
-      displayName: user.name || user.login,
-      email: user.email
-    });
-    
-    // Set session cookie - use SameSite=None for cross-domain
-    res.cookie('session_id', sessionId, {
-      httpOnly: true,
-      secure: true, // Required for SameSite=None
-      sameSite: 'none', // Allow cross-domain cookie
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      domain: config.server.nodeEnv === 'production' ? '.aayushman.dev' : undefined // Share across subdomains
-    });
-    
-    console.log(`✅ GitHub user logged in: @${user.login}`);
-    res.redirect(`${FRONTEND_URL}/dashboard?auth=success`);
-  } catch (err) {
-    console.error('❌ GitHub OAuth callback error:', err);
-    res.redirect(`${FRONTEND_URL}/dashboard?error=${encodeURIComponent(err.message)}`);
-  }
-});
-
-// Auth middleware for user routes
-function requireAuth(req, res, next) {
-  const sessionId = req.cookies?.session_id || githubAuth.getSessionFromCookie(req.headers.cookie);
-  const session = githubAuth.getSession(sessionId);
-  
-  if (!session) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
-  
-  req.session = session;
-  req.user = session.user;
-  next();
-}
-
-// ============================================
-// User API Routes (/api/me/*)
-// ============================================
-
-// In-memory store for GitHub tokens (use Redis/DB in production)
-const githubTokenStore = new Map();
-
-// Register GitHub token from Firebase auth
-app.post('/api/me/github-token', async (req, res) => {
-  const { githubToken } = req.body;
-  
-  if (!githubToken) {
-    return res.status(400).json({ error: 'githubToken is required' });
-  }
-  
-  try {
-    // Verify token by fetching user info
-    const user = await githubAuth.getGitHubUser(githubToken);
-    
-    // Store token mapped to GitHub user ID
-    githubTokenStore.set(`github:${user.id}`, {
-      token: githubToken,
+    // Store tokens in database (persistent, survives server restarts)
+    database.storeGithubToken(
+      user.id.toString(),
+      tokens.accessToken,
       user,
-      createdAt: Date.now()
-    });
+      expiresAt,
+      tokens.refreshToken
+    );
     
     // Create/update user in database
     database.upsertUser({
@@ -317,63 +274,87 @@ app.post('/api/me/github-token', async (req, res) => {
       email: user.email
     });
     
-    // Set a cookie to identify the user
+    // Set cookie to identify the user (long-lived - 6 months to match refresh token)
     res.cookie('github_user_id', user.id, {
       httpOnly: true,
       secure: true,
       sameSite: 'none',
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      maxAge: 180 * 24 * 60 * 60 * 1000, // 180 days (6 months)
       domain: config.server.nodeEnv === 'production' ? '.aayushman.dev' : undefined
     });
     
-    console.log(`✅ GitHub token registered for @${user.login}`);
-    res.json({ success: true, user: { login: user.login, id: user.id } });
+    const tokenType = tokens.refreshToken ? 'with refresh token' : 'classic (no expiry)';
+    console.log(`✅ GitHub user logged in: @${user.login} (${tokenType})`);
+    res.redirect(`${FRONTEND_URL}/dashboard?auth=success`);
   } catch (err) {
-    console.error('❌ Failed to register GitHub token:', err);
-    res.status(401).json({ error: 'Invalid GitHub token' });
+    console.error('❌ GitHub OAuth callback error:', err);
+    res.redirect(`${FRONTEND_URL}/dashboard?error=${encodeURIComponent(err.message)}`);
   }
 });
 
-// Helper to get GitHub token from cookie
-function getGithubTokenFromCookie(req) {
-  const githubUserId = req.cookies?.github_user_id;
-  if (!githubUserId) return null;
-  
-  const stored = githubTokenStore.get(`github:${githubUserId}`);
-  return stored?.token || null;
+// ============================================
+// User API Routes (/api/me/*)
+// All endpoints use automatic token refresh via githubAuth.getValidAccessToken()
+// ============================================
+
+// Helper to get GitHub user ID from cookie
+function getGithubUserIdFromCookie(req) {
+  return req.cookies?.github_user_id?.toString() || null;
 }
 
 // Get current user (based on stored GitHub token)
-app.get('/api/me', (req, res) => {
-  const githubUserId = req.cookies?.github_user_id;
+app.get('/api/me', async (req, res) => {
+  const githubUserId = getGithubUserIdFromCookie(req);
   if (!githubUserId) {
     return res.status(401).json({ error: 'Not authenticated', user: null });
   }
   
-  const stored = githubTokenStore.get(`github:${githubUserId}`);
-  if (!stored) {
-    return res.status(401).json({ error: 'Session expired', user: null });
+  const tokenData = database.getGithubToken(githubUserId);
+  if (!tokenData) {
+    return res.status(401).json({ 
+      error: 'not_authenticated', 
+      message: 'Please sign in with GitHub.',
+      user: null 
+    });
   }
   
-  res.json({ user: stored.user, xConnected: database.isOAuthTokenValid() });
+  // Try to get a valid token (will auto-refresh if needed)
+  const validToken = await githubAuth.getValidAccessToken(githubUserId);
+  if (!validToken) {
+    return res.status(401).json({ 
+      error: 'token_expired', 
+      message: 'Session expired. Please sign in again.',
+      user: null 
+    });
+  }
+  
+  // Get fresh token data after potential refresh
+  const freshTokenData = database.getGithubToken(githubUserId);
+  
+  res.json({ 
+    user: freshTokenData.user, 
+    xConnected: database.isOAuthTokenValid(),
+    tokenExpiresAt: freshTokenData.expiresAt,
+    hasRefreshToken: !!freshTokenData.refreshToken
+  });
 });
 
 // Get user's repos with OG post and enabled status
 app.get('/api/me/repos', async (req, res) => {
-  const githubToken = getGithubTokenFromCookie(req);
-  const githubUserId = req.cookies?.github_user_id;
+  const githubUserId = getGithubUserIdFromCookie(req);
   
-  if (!githubToken) {
+  if (!githubUserId) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
   
   try {
-    const repos = await githubAuth.getUserRepos(githubToken);
+    // This automatically refreshes the token if needed
+    const repos = await githubAuth.getUserRepos(githubUserId);
     
     // Enrich with OG post data and enabled status
     const enrichedRepos = await Promise.all(repos.map(async (repo) => {
       const ogPostId = await database.getOgPost(repo.full_name);
-      const repoStatus = githubUserId ? database.getRepoStatus(`github:${githubUserId}`, repo.full_name) : null;
+      const repoStatus = database.getRepoStatus(`github:${githubUserId}`, repo.full_name);
       
       return {
         id: repo.id,
@@ -390,16 +371,18 @@ app.get('/api/me/repos', async (req, res) => {
     res.json({ repos: enrichedRepos });
   } catch (err) {
     console.error('❌ Failed to get repos:', err);
+    if (err.message === 'No valid access token available' || err.message === 'Token expired') {
+      return res.status(401).json({ error: 'token_expired', message: 'Please sign in again.' });
+    }
     res.status(500).json({ error: 'Failed to get repositories' });
   }
 });
 
 // Enable posting for a repo
 app.post('/api/me/repos/enable', async (req, res) => {
-  const githubToken = getGithubTokenFromCookie(req);
-  const githubUserId = req.cookies?.github_user_id;
+  const githubUserId = getGithubUserIdFromCookie(req);
   
-  if (!githubToken || !githubUserId) {
+  if (!githubUserId) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
   
@@ -410,8 +393,8 @@ app.post('/api/me/repos/enable', async (req, res) => {
   }
   
   try {
-    // Verify user has access to this repo
-    const repos = await githubAuth.getUserRepos(githubToken);
+    // Verify user has access to this repo (auto-refreshes token)
+    const repos = await githubAuth.getUserRepos(githubUserId);
     const repo = repos.find(r => r.full_name === repoFullName);
     
     if (!repo) {
@@ -425,7 +408,7 @@ app.post('/api/me/repos/enable', async (req, res) => {
       });
     }
     
-    // Create webhook automatically
+    // Create webhook automatically (uses auto-refresh)
     const webhookUrl = `${process.env.API_BASE_URL || `http://localhost:${config.server.port}`}/webhook/github`;
     const webhookSecret = config.github.webhookSecret;
     
@@ -433,7 +416,7 @@ app.post('/api/me/repos/enable', async (req, res) => {
       return res.status(500).json({ error: 'Webhook secret not configured on server' });
     }
     
-    const webhookResult = await githubAuth.createWebhook(githubToken, repoFullName, webhookUrl, webhookSecret);
+    const webhookResult = await githubAuth.createWebhook(githubUserId, repoFullName, webhookUrl, webhookSecret);
     
     const success = database.enableRepo(`github:${githubUserId}`, repoFullName);
     
@@ -451,16 +434,18 @@ app.post('/api/me/repos/enable', async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Failed to enable repo:', err);
+    if (err.message === 'No valid access token available') {
+      return res.status(401).json({ error: 'token_expired', message: 'Please sign in again.' });
+    }
     res.status(500).json({ error: err.message || 'Failed to enable repo' });
   }
 });
 
 // Disable posting for a repo
 app.post('/api/me/repos/disable', async (req, res) => {
-  const githubToken = getGithubTokenFromCookie(req);
-  const githubUserId = req.cookies?.github_user_id;
+  const githubUserId = getGithubUserIdFromCookie(req);
   
-  if (!githubToken || !githubUserId) {
+  if (!githubUserId) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
   
@@ -471,12 +456,12 @@ app.post('/api/me/repos/disable', async (req, res) => {
   }
   
   try {
-    // Delete webhook
+    // Delete webhook (uses auto-refresh)
     const webhookUrl = `${process.env.API_BASE_URL || `http://localhost:${config.server.port}`}/webhook/github`;
     let webhookDeleted = false;
     
     try {
-      const result = await githubAuth.deleteWebhook(githubToken, repoFullName, webhookUrl);
+      const result = await githubAuth.deleteWebhook(githubUserId, repoFullName, webhookUrl);
       webhookDeleted = result.deleted;
     } catch (webhookErr) {
       // Log but don't fail - user might have lost admin access
@@ -493,16 +478,18 @@ app.post('/api/me/repos/disable', async (req, res) => {
     res.json({ success: true, repoFullName, enabled: false, webhookDeleted });
   } catch (err) {
     console.error('❌ Failed to disable repo:', err);
+    if (err.message === 'No valid access token available') {
+      return res.status(401).json({ error: 'token_expired', message: 'Please sign in again.' });
+    }
     res.status(500).json({ error: 'Failed to disable repo' });
   }
 });
 
 // Set OG post for user's repo
 app.post('/api/me/repos/og-post', async (req, res) => {
-  const githubToken = getGithubTokenFromCookie(req);
-  const githubUserId = req.cookies?.github_user_id;
+  const githubUserId = getGithubUserIdFromCookie(req);
   
-  if (!githubToken) {
+  if (!githubUserId) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
   
@@ -512,9 +499,9 @@ app.post('/api/me/repos/og-post', async (req, res) => {
     return res.status(400).json({ error: 'repoFullName and tweetId are required' });
   }
   
-  // Verify user has access to this repo
+  // Verify user has access to this repo (auto-refreshes token)
   try {
-    const repos = await githubAuth.getUserRepos(githubToken);
+    const repos = await githubAuth.getUserRepos(githubUserId);
     const hasAccess = repos.some(r => r.full_name === repoFullName);
     
     if (!hasAccess) {
@@ -536,6 +523,9 @@ app.post('/api/me/repos/og-post', async (req, res) => {
     res.json({ success: true, repoFullName, tweetId });
   } catch (err) {
     console.error('❌ Failed to set OG post:', err);
+    if (err.message === 'No valid access token available') {
+      return res.status(401).json({ error: 'token_expired', message: 'Please sign in again.' });
+    }
     res.status(500).json({ error: 'Failed to set OG post' });
   }
 });
@@ -544,9 +534,9 @@ app.post('/api/me/repos/og-post', async (req, res) => {
 app.post('/auth/logout', (req, res) => {
   const githubUserId = req.cookies?.github_user_id;
   
-  // Clear stored token
+  // Clear stored token from database
   if (githubUserId) {
-    githubTokenStore.delete(`github:${githubUserId}`);
+    database.deleteGithubToken(githubUserId.toString());
   }
   
   res.clearCookie('github_user_id', {

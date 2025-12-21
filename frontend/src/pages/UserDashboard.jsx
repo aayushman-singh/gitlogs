@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
-import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
-import { auth, githubProvider } from '../firebase';
-import { getMyRepos, setMyRepoOgPost, getHealth, getBackendUrl, enableRepo, disableRepo, registerGithubToken, getCurrentUser } from '../utils/api';
+import { getMyRepos, setMyRepoOgPost, getHealth, getBackendUrl, enableRepo, disableRepo, getCurrentUser, logout } from '../utils/api';
 import logo from '../../gitlogs.png';
 
 export default function UserDashboard() {
@@ -15,37 +13,17 @@ export default function UserDashboard() {
   const [result, setResult] = useState({ type: '', message: '' });
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      if (firebaseUser) {
-        loadReposAndHealth();
-      } else {
-        setLoading(false);
-      }
-    });
-    return () => unsubscribe();
+    loadUserAndRepos();
   }, []);
 
-  const handleGitHubLogin = async () => {
-    setLoading(true);
-    try {
-      const result = await signInWithPopup(auth, githubProvider);
-      // Get the GitHub access token from the credential
-      const credential = result._tokenResponse;
-      if (credential?.oauthAccessToken) {
-        // Register the GitHub token with our backend
-        await registerGithubToken(credential.oauthAccessToken);
-      }
-    } catch (error) {
-      console.error('GitHub login error:', error);
-      setResult({ type: 'error', message: error.message || 'Failed to login with GitHub' });
-      setLoading(false);
-    }
+  const handleGitHubLogin = () => {
+    // Redirect to backend OAuth endpoint - it handles everything
+    window.location.href = `${getBackendUrl()}/auth/github`;
   };
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await logout();
       setUser(null);
       setRepos([]);
     } catch (error) {
@@ -53,20 +31,29 @@ export default function UserDashboard() {
     }
   };
 
-  const loadReposAndHealth = async () => {
+  const loadUserAndRepos = async () => {
     setLoading(true);
     try {
-      const [reposData, healthData, userData] = await Promise.all([
-        getMyRepos().catch(() => ({ repos: [] })),
-        getHealth().catch(() => null),
-        getCurrentUser().catch(() => null)
-      ]);
-
-      setRepos(reposData.repos || []);
-      setHealth(healthData);
-      setXConnected(Boolean(userData?.xConnected));
+      // Try to get current user (will fail if not authenticated)
+      const userData = await getCurrentUser();
+      
+      if (userData?.user) {
+        setUser(userData.user);
+        setXConnected(Boolean(userData.xConnected));
+        
+        // Load repos
+        const [reposData, healthData] = await Promise.all([
+          getMyRepos().catch(() => ({ repos: [] })),
+          getHealth().catch(() => null)
+        ]);
+        
+        setRepos(reposData.repos || []);
+        setHealth(healthData);
+      }
     } catch (e) {
-      console.error('Failed to load data:', e);
+      // Not authenticated - that's fine, show login screen
+      console.log('Not authenticated');
+      setUser(null);
     }
     setLoading(false);
   };
@@ -82,7 +69,7 @@ export default function UserDashboard() {
       setResult({ type: 'success', message: `OG post set for ${repoFullName}!` });
       setSelectedRepo(null);
       setOgTweetId('');
-      loadReposAndHealth();
+      loadUserAndRepos();
     } catch (e) {
       setResult({ type: 'error', message: e.message });
     }
@@ -169,10 +156,10 @@ export default function UserDashboard() {
       <div className="card mb-4">
         <div className="flex gap-4" style={{ alignItems: 'center', justifyContent: 'space-between' }}>
           <div className="flex gap-4" style={{ alignItems: 'center' }}>
-            <img src={user.photoURL} alt={user.displayName} style={{ width: 64, height: 64, borderRadius: '50%' }} />
+            <img src={user.avatar_url} alt={user.login} style={{ width: 64, height: 64, borderRadius: '50%' }} />
             <div>
-              <h2 style={{ marginBottom: 4 }}>{user.displayName}</h2>
-              <p className="text-muted">{user.email}</p>
+              <h2 style={{ marginBottom: 4 }}>{user.name || user.login}</h2>
+              <p className="text-muted">@{user.login}</p>
             </div>
           </div>
           <button onClick={handleLogout} className="btn btn-secondary btn-sm">Logout</button>
@@ -191,18 +178,18 @@ export default function UserDashboard() {
         </div>
         <div className="quick-actions">
           {xConnected ? (
-            <button className="btn btn-secondary" disabled>✅ Connected to X</button>
+            <button className="btn btn-x" disabled>✅ Connected to X</button>
           ) : (
             <a
               href={`${getBackendUrl()}/auth/x`}
-              className="btn btn-primary"
+              className="btn btn-x"
               target="_blank"
               rel="noopener noreferrer"
             >
               🔐 Connect X Account
             </a>
           )}
-          <button className="btn btn-secondary" onClick={loadReposAndHealth}>🔄 Refresh</button>
+          <button className="btn btn-secondary" onClick={loadUserAndRepos}>🔄 Refresh</button>
         </div>
       </div>
 
@@ -306,48 +293,6 @@ export default function UserDashboard() {
             ))}
           </div>
         )}
-      </div>
-
-      <div className="card">
-        <div className="card-header">
-          <h2 className="card-title">🔗 Webhook Setup</h2>
-        </div>
-        <p className="text-muted mb-4">
-          Configure your GitHub repository webhook to start auto-tweeting commits.
-        </p>
-
-        <div className="form-group">
-          <label className="form-label">Webhook URL</label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              type="text"
-              className="form-input"
-              value={`${getBackendUrl()}/webhook/github`}
-              readOnly
-            />
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => {
-                navigator.clipboard.writeText(`${getBackendUrl()}/webhook/github`);
-                setResult({ type: 'success', message: 'Webhook URL copied!' });
-              }}
-            >
-              Copy
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-4">
-          <h4 style={{ fontSize: 14, marginBottom: 12 }}>Setup Steps:</h4>
-          <ol style={{ paddingLeft: 20, lineHeight: 2, color: 'var(--text-secondary)' }}>
-            <li>Go to your GitHub repository → Settings → Webhooks</li>
-            <li>Click "Add webhook"</li>
-            <li>Paste the webhook URL above</li>
-            <li>Set Content type to <code>application/json</code></li>
-            <li>Select "Just the push event"</li>
-            <li>Click "Add webhook"</li>
-          </ol>
-        </div>
       </div>
     </div>
   );
