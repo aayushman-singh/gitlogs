@@ -58,11 +58,12 @@ class OAuthHandler {
   /**
    * Refresh access token using refresh token
    * Similar to Python _refresh_token method
+   * @param {string} userId - User ID to refresh token for (e.g., 'github:123456')
    */
-  async _refreshToken() {
-    const refreshToken = db.getRefreshToken();
+  async _refreshToken(userId = 'default') {
+    const refreshToken = db.getRefreshToken(userId);
     if (!refreshToken) {
-      console.log('No refresh token found. User needs to re-authenticate.');
+      console.log(`No refresh token found for user ${userId}. User needs to re-authenticate.`);
       return null;
     }
 
@@ -121,8 +122,8 @@ class OAuthHandler {
               expires_at: Date.now() / 1000 + (response.expires_in || 7200),
             };
 
-            db.storeOAuthToken(token);
-            console.log('✅ Token refreshed successfully');
+            db.storeOAuthToken(token, userId);
+            console.log(`✅ Token refreshed successfully for user: ${userId}`);
             resolve(token);
           } catch (error) {
             reject(new Error(`Failed to parse token response: ${error.message}`));
@@ -145,40 +146,45 @@ class OAuthHandler {
    * - Checks database for existing token
    * - Refreshes if expired
    * - Returns access token string
+   * @param {string} userId - User ID to get token for
    */
-  async getAccessToken() {
-    let token = db.getOAuthToken();
+  async getAccessToken(userId = 'default') {
+    let token = db.getOAuthToken(userId);
     
     if (!token) {
-      console.log('No token found. Starting authentication...');
+      console.log(`No token found for user ${userId}. Starting authentication...`);
       throw new Error(
         'No OAuth token found. Please authenticate first by visiting:\n' +
-        `http://localhost:${OAUTH_PORT}`
+        `${API_BASE}/auth/x`
       );
     }
 
     // Check if token is expired
     const expiresAt = token.expires_at || 0;
     if (Date.now() / 1000 >= expiresAt) {
-      console.log('Token expired. Refreshing...');
-      token = await this._refreshToken();
+      console.log(`Token expired for user ${userId}. Refreshing...`);
+      token = await this._refreshToken(userId);
     }
 
     return token ? token.access_token : null;
   }
 
   /**
-   * Check if token is valid
+   * Check if token is valid for a specific user
+   * @param {string} userId - User ID to check
    */
-  isTokenValid() {
-    return db.isOAuthTokenValid();
+  isTokenValid(userId = 'default') {
+    return db.isOAuthTokenValid(userId);
   }
 
   /**
    * Exchange authorization code for tokens with PKCE
    * Similar to Python auth_callback route
+   * @param {string} code - Authorization code from OAuth callback
+   * @param {string} codeVerifier - PKCE code verifier
+   * @param {string} userId - User ID to associate token with (e.g., 'github:123456')
    */
-  async exchangeCodeForTokens(code, codeVerifier) {
+  async exchangeCodeForTokens(code, codeVerifier, userId = 'default') {
     const oauth = this._makeOAuthSession();
     
     // Build token request with PKCE
@@ -232,9 +238,9 @@ class OAuthHandler {
               expires_at: Date.now() / 1000 + (response.expires_in || 7200),
             };
 
-            const stored = db.storeOAuthToken(token);
+            const stored = db.storeOAuthToken(token, userId);
             if (stored) {
-              console.log('✅ Tokens stored successfully');
+              console.log(`✅ X OAuth tokens stored successfully for user: ${userId}`);
             } else {
               console.error('❌ Failed to store tokens in database.');
               console.error('   Database may not be initialized. Check server logs for database initialization errors.');

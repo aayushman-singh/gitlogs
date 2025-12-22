@@ -136,10 +136,73 @@ auth system overhaul
 };
 
 /**
+ * Parse template content (handles both old and new formats)
+ */
+function parseTemplateContent(templateContent) {
+  if (!templateContent) return { template: '', prompt: '', isNewFormat: false };
+  
+  // Try to parse as JSON (new format)
+  try {
+    const parsed = JSON.parse(templateContent);
+    if (parsed.template !== undefined && parsed.prompt !== undefined) {
+      return { 
+        template: parsed.template || '', 
+        prompt: parsed.prompt || '', 
+        isNewFormat: true 
+      };
+    }
+  } catch (e) {
+    // Not JSON, treat as old format
+  }
+  
+  // Old format: entire content is the prompt, template is empty
+  return { template: '', prompt: templateContent, isNewFormat: false };
+}
+
+/**
  * Build prompt from template with variable substitution
  */
-function buildPromptFromTemplate(template, context, projectContext) {
-  let prompt = template;
+function buildPromptFromTemplate(templateContent, context, projectContext) {
+  const parsed = parseTemplateContent(templateContent);
+  
+  // If new format: combine template (with variables replaced) + prompt instructions
+  if (parsed.isNewFormat) {
+    let templateWithVars = parsed.template;
+    
+    // Replace all template variables in the template
+    templateWithVars = templateWithVars.replace(/\{\{PROJECT_CONTEXT\}\}/g, projectContext || '');
+    templateWithVars = templateWithVars.replace(/\{\{REPOSITORY\}\}/g, context.repository || '');
+    templateWithVars = templateWithVars.replace(/\{\{COMMIT_TYPE\}\}/g, context.commitType || 'change');
+    templateWithVars = templateWithVars.replace(/\{\{COMMIT_MESSAGE\}\}/g, context.commitMessage || '');
+    templateWithVars = templateWithVars.replace(/\{\{FILES_CHANGED\}\}/g, context.filesChanged?.toString() || '0');
+    templateWithVars = templateWithVars.replace(/\{\{AUTHOR\}\}/g, context.author || '');
+    templateWithVars = templateWithVars.replace(/\{\{BRANCH\}\}/g, context.branch || 'main');
+    
+    // Handle file lists
+    const addedFiles = context.addedFiles?.length > 0 
+      ? `- Added Files: ${context.addedFiles.join(', ')}` 
+      : '';
+    const modifiedFiles = context.modifiedFiles?.length > 0 
+      ? `- Modified Files: ${context.modifiedFiles.join(', ')}` 
+      : '';
+    const removedFiles = context.removedFiles?.length > 0 
+      ? `- Removed Files: ${context.removedFiles.join(', ')}` 
+      : '';
+    
+    templateWithVars = templateWithVars.replace(/\{\{ADDED_FILES\}\}/g, addedFiles);
+    templateWithVars = templateWithVars.replace(/\{\{MODIFIED_FILES\}\}/g, modifiedFiles);
+    templateWithVars = templateWithVars.replace(/\{\{REMOVED_FILES\}\}/g, removedFiles);
+    
+    // Combine: prompt instructions + template with variables
+    if (parsed.prompt) {
+      return `${parsed.prompt}\n\nTemplate to use:\n${templateWithVars}`;
+    } else {
+      return templateWithVars;
+    }
+  }
+  
+  // Old format: treat entire content as prompt and replace variables
+  let prompt = parsed.prompt;
   
   // Replace all template variables
   prompt = prompt.replace(/\{\{PROJECT_CONTEXT\}\}/g, projectContext || '');

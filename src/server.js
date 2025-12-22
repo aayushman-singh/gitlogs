@@ -20,6 +20,7 @@ app.use(express.static(frontendPath, { fallthrough: true }));
 app.use(express.static(publicPath, { fallthrough: true }));
 
 // In-memory store for PKCE verifiers and GitHub OAuth state
+// pkceStore: state -> { codeVerifier, githubUserId, timestamp }
 const pkceStore = new Map();
 const githubStateStore = new Map();
 
@@ -333,12 +334,15 @@ app.get('/api/me', async (req, res) => {
   // Get fresh token data after potential refresh
   const freshTokenData = database.getGithubToken(githubUserId);
   
-  // Get X/Twitter user info if connected
+  // Get X/Twitter user info if connected (per-user X OAuth)
+  const xOAuthUserId = database.getXOAuthUserId(githubUserId);
   let xUserInfo = null;
-  if (database.isOAuthTokenValid()) {
+  const xConnected = database.isOAuthTokenValid(xOAuthUserId);
+  
+  if (xConnected) {
     try {
       const { getXUserInfo } = require('./twitterClient');
-      xUserInfo = await getXUserInfo();
+      xUserInfo = await getXUserInfo(xOAuthUserId);
     } catch (err) {
       console.error('Failed to get X user info:', err.message);
       // Continue without X user info
@@ -347,7 +351,7 @@ app.get('/api/me', async (req, res) => {
   
   res.json({ 
     user: freshTokenData.user, 
-    xConnected: database.isOAuthTokenValid(),
+    xConnected: xConnected,
     tokenExpiresAt: freshTokenData.expiresAt,
     hasRefreshToken: !!freshTokenData.refreshToken,
     xUserInfo: xUserInfo
@@ -673,17 +677,50 @@ app.post('/auth/logout', (req, res) => {
 });
 
 // ============================================
-// X/Twitter OAuth Routes
+// X/Twitter OAuth Routes (per-user X OAuth)
 // ============================================
 
 // OAuth 2.0 with PKCE - Start authentication flow
+// User must be logged in with GitHub first
 app.get('/auth/x', async (req, res) => {
   try {
+    // Get GitHub user from cookie - required for per-user X OAuth
+    const githubUserId = getGithubUserIdFromCookie(req);
+    if (!githubUserId) {
+      return res.send(renderXAuthPage({
+        title: 'GitHub login required',
+        message: 'Please sign in with GitHub before connecting your X account.',
+        detail: 'X accounts are linked to your GitHub account for multi-user support.',
+        status: 'error'
+      }));
+    }
+    
     const oauthHandler = new OAuthHandler();
     const { authUrl, codeVerifier } = oauthHandler.generateAuthUrl();
     
-    pkceStore.set('state', codeVerifier);
-    res.redirect(authUrl);
+    // Generate a unique state to prevent CSRF and store with user info
+    const state = `x_${Date.now()}_${githubUserId}`;
+    
+    // Store PKCE verifier with GitHub user ID for callback
+    pkceStore.set(state, {
+      codeVerifier,
+      githubUserId,
+      timestamp: Date.now()
+    });
+    
+    // Clean up old PKCE states (older than 10 minutes)
+    const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+    for (const [key, value] of pkceStore.entries()) {
+      if (value.timestamp && value.timestamp < tenMinutesAgo) {
+        pkceStore.delete(key);
+      }
+    }
+    
+    // Modify auth URL to use our custom state
+    const authUrlWithState = authUrl.replace(/state=[^&]+/, `state=${encodeURIComponent(state)}`);
+    
+    console.log(`🔐 Starting X OAuth for GitHub user: ${githubUserId}`);
+    res.redirect(authUrlWithState);
   } catch (error) {
     console.error('❌ X OAuth initialization error:', error);
     res
@@ -697,7 +734,7 @@ app.get('/auth/x', async (req, res) => {
   }
 });
 
-// X OAuth callback with PKCE
+// X OAuth callback with PKCE (per-user)
 app.get('/auth/x/callback', async (req, res) => {
   const { code, error, error_description, state } = req.query;
   
@@ -718,20 +755,32 @@ app.get('/auth/x/callback', async (req, res) => {
   }
 
   try {
-    const codeVerifier = pkceStore.get(state || 'state');
-    if (!codeVerifier) {
+    // Get stored PKCE data including GitHub user ID
+    const pkceData = pkceStore.get(state);
+    if (!pkceData || !pkceData.codeVerifier) {
       throw new Error('PKCE code verifier not found. Please restart the OAuth flow.');
     }
-
-    const oauthHandler = new OAuthHandler();
-    await oauthHandler.exchangeCodeForTokens(code, codeVerifier);
     
-    pkceStore.delete(state || 'state');
+    const { codeVerifier, githubUserId } = pkceData;
+    
+    if (!githubUserId) {
+      throw new Error('GitHub user ID not found. Please sign in with GitHub first.');
+    }
+    
+    // Get the X OAuth user ID for this GitHub user
+    const xOAuthUserId = database.getXOAuthUserId(githubUserId);
+    
+    const oauthHandler = new OAuthHandler();
+    await oauthHandler.exchangeCodeForTokens(code, codeVerifier, xOAuthUserId);
+    
+    pkceStore.delete(state);
+    
+    console.log(`✅ X account connected for GitHub user: ${githubUserId} (stored as: ${xOAuthUserId})`);
     
     res.send(renderXAuthPage({
       title: 'X connected successfully',
-      message: 'Your X account is now linked to GitLogs.',
-      detail: 'You can safely close this window or return to the dashboard.',
+      message: 'Your X account is now linked to your GitLogs account.',
+      detail: 'Your X connection is personal and won\'t affect other users. You can safely close this window.',
       status: 'success'
     }));
   } catch (error) {

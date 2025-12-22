@@ -123,13 +123,13 @@ function isMergeCommit(commit) {
  * @param {object} commit - Git commit object
  * @param {object} repository - Repository information
  * @param {object} pusher - Pusher information
- * @param {object} options - Additional options (repoContext, userId)
+ * @param {object} options - Additional options (repoContext, userId, xOAuthUserId)
  */
 async function processCommit(commit, repository, pusher, options = {}) {
-  const { repoContext = null, userId = 'default' } = options;
+  const { repoContext = null, userId = 'default', xOAuthUserId = 'default' } = options;
   
   try {
-    console.log(`📝 Processing commit: ${commit.id.substring(0, 7)} (user: ${userId})`);
+    console.log(`📝 Processing commit: ${commit.id.substring(0, 7)} (user: ${userId}, xAuth: ${xOAuthUserId})`);
 
     const commitData = commitFormatter.formatCommit(commit, repository, pusher);
 
@@ -188,7 +188,8 @@ async function processCommit(commit, repository, pusher, options = {}) {
     
     let tweetId;
     try {
-      tweetId = await twitterClient.postTweet(tweetData, null, quoteTweetId);
+      // Post tweet using the user's X OAuth token
+      tweetId = await twitterClient.postTweet(tweetData, null, quoteTweetId, xOAuthUserId);
     } catch (tweetError) {
       console.error('❌ Twitter posting failed:', tweetError.message);
       throw tweetError;
@@ -294,8 +295,16 @@ async function handleWebhook(req, res) {
     const user = database.getUserByRepo(repository.full_name);
     const userId = user ? user.user_id : 'default';
     
+    // Get the X OAuth user ID for posting tweets
+    // Extract GitHub user ID from userId (e.g., 'github:123456' -> '123456')
+    let xOAuthUserId = 'default';
+    if (user && user.user_id && user.user_id.startsWith('github:')) {
+      const githubUserId = user.user_id.replace('github:', '');
+      xOAuthUserId = database.getXOAuthUserId(githubUserId);
+    }
+    
     if (user) {
-      console.log(`👤 User: ${user.display_name || user.user_id}`);
+      console.log(`👤 User: ${user.display_name || user.user_id} (X auth: ${xOAuthUserId})`);
     }
 
     // Generate/fetch repository context for enhanced AI prompts
@@ -312,7 +321,8 @@ async function handleWebhook(req, res) {
     for (const commit of nonMergeCommits) {
       const result = await processCommit(commit, repository, pusher, {
         repoContext,
-        userId
+        userId,
+        xOAuthUserId
       });
       results.push(result);
     }

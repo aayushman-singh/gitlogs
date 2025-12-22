@@ -16,11 +16,10 @@ const { calculateTwitterLength } = require('./commitFormatter');
  * Token refresh follows OAuth 2.0 PKCE standards (RFC 7636).
  */
 
-// Initialize X API client (lazy initialization)
-let twitterClient;
-let authClientRef; // Store reference to auth client for token refresh
+// Per-user X API clients (lazy initialization)
+// Map of userId -> { client, authClient, initialized }
+const userClients = new Map();
 let oauthHandler; // OAuth handler for token management (similar to Python XAuth)
-let isInitialized = false;
 
 // Initialize OAuth handler if client ID is available
 if (config.twitter.clientId) {
@@ -32,16 +31,19 @@ if (config.twitter.clientId) {
 }
 
 /**
- * Initialize OAuth 2.0 client with PKCE support (lazy initialization)
+ * Initialize OAuth 2.0 client with PKCE support for a specific user (lazy initialization)
  * 
  * Uses OAuthHandler for token management (similar to Python XAuth implementation).
  * Tokens are stored in database and automatically refreshed.
  * 
- * This function is called automatically when postTweet or verifyCredentials is called.
+ * @param {string} userId - User ID to initialize client for (e.g., 'github:123456')
+ * @returns {object} - { client, authClient } for the user
  */
-function initializeTwitterClient() {
-  if (isInitialized && twitterClient) {
-    return; // Already initialized
+function initializeTwitterClient(userId = 'default') {
+  // Check if already initialized for this user
+  const existing = userClients.get(userId);
+  if (existing && existing.initialized) {
+    return existing;
   }
 
   if (!config.twitter.clientId) {
@@ -52,12 +54,12 @@ function initializeTwitterClient() {
       '  - OAUTH_CLIENT_SECRET (optional, for confidential client mode)\n\n' +
       'To authenticate with OAuth 2.0 PKCE:\n' +
       '  1. Set OAUTH_CLIENT_ID in your .env file\n' +
-      '  2. Visit http://localhost:' + config.server.port + '/oauth\n' +
+      '  2. Visit http://localhost:' + config.server.port + '/auth/x\n' +
       '  3. Tokens will be stored automatically in the database'
     );
   }
 
-  const callbackUrl = process.env.OAUTH_CALLBACK_URL || `http://localhost:${config.server.port}/oauth/callback`;
+  const callbackUrl = process.env.OAUTH_CALLBACK_URL || `http://localhost:${config.server.port}/auth/x/callback`;
   
   // Determine client type based on presence of client_secret
   const isConfidentialClient = config.twitter.clientSecret && config.twitter.clientSecret !== '';
@@ -76,13 +78,12 @@ function initializeTwitterClient() {
   
   const authClient = new auth.OAuth2User(authClientConfig);
 
-  // Get token from database (similar to Python implementation)
-  // Tokens must be obtained via OAuth flow
+  // Get token from database for this user
   let storedToken = null;
   if (oauthHandler) {
     try {
-      // Get token directly from database (supports both DB and file storage)
-      storedToken = require('./database').getOAuthToken();
+      // Get token for specific user (supports per-user tokens)
+      storedToken = require('./database').getOAuthToken(userId);
     } catch (error) {
       // Database might not have a token yet
     }
@@ -90,8 +91,8 @@ function initializeTwitterClient() {
 
   if (!storedToken || !storedToken.access_token) {
     throw new Error(
-      'No OAuth token found. Please authenticate first.\n' +
-      `Visit http://localhost:${config.server.port}/oauth to authenticate with X API (OAuth 2.0 with PKCE).`
+      `No OAuth token found for user ${userId}. Please authenticate first.\n` +
+      `Visit http://localhost:${config.server.port}/auth/x to authenticate with X API (OAuth 2.0 with PKCE).`
     );
   }
 
@@ -105,24 +106,23 @@ function initializeTwitterClient() {
     refresh_token: refreshToken || 'dummy_refresh_token', // Placeholder if not available yet
   };
 
-  // Override refreshAccessToken to use OAuth handler (similar to Python implementation)
-  // This ensures tokens are stored in database and refreshed properly
+  // Override refreshAccessToken to use OAuth handler for this user
   authClient.refreshAccessToken = async () => {
     if (!oauthHandler) {
       throw new Error(
         'OAuth handler not available. Please authenticate via OAuth first.\n' +
-        `Visit http://localhost:${config.server.port}/oauth to authenticate.`
+        `Visit http://localhost:${config.server.port}/auth/x to authenticate.`
       );
     }
 
     try {
-      console.log('🔄 Refreshing token using OAuth handler...');
-      const newToken = await oauthHandler._refreshToken();
+      console.log(`🔄 Refreshing token for user ${userId}...`);
+      const newToken = await oauthHandler._refreshToken(userId);
       
       if (!newToken) {
         throw new Error(
-          'Token refresh failed. Please re-authenticate.\n' +
-          `Visit http://localhost:${config.server.port}/oauth to authenticate.`
+          `Token refresh failed for user ${userId}. Please re-authenticate.\n` +
+          `Visit http://localhost:${config.server.port}/auth/x to authenticate.`
         );
       }
 
@@ -137,27 +137,31 @@ function initializeTwitterClient() {
       
       return authClient.token;
     } catch (error) {
-      console.error('❌ OAuth handler refresh failed:', error.message);
+      console.error(`❌ OAuth handler refresh failed for user ${userId}:`, error.message);
       throw new Error(
         `Token refresh failed: ${error.message}\n` +
-        `Please re-authenticate by visiting http://localhost:${config.server.port}/oauth`
+        `Please re-authenticate by visiting http://localhost:${config.server.port}/auth/x`
       );
     }
   };
 
-  authClientRef = authClient; // Store reference for use in post actions
-  twitterClient = new Client(authClient);
-  isInitialized = true;
+  const client = new Client(authClient);
+  
+  // Store client for this user
+  const userClientData = {
+    client,
+    authClient,
+    initialized: true
+  };
+  userClients.set(userId, userClientData);
   
   // Log successful initialization
   const clientType = isConfidentialClient ? 'confidential' : 'public (PKCE)';
   const hasRefreshToken = refreshToken && refreshToken !== 'dummy_refresh_token';
-  console.log(`✅ X API client initialized (${clientType} mode)`);
-  console.log(`   Token source: database`);
+  console.log(`✅ X API client initialized for user ${userId} (${clientType} mode)`);
   console.log(`   Refresh token: ${hasRefreshToken ? 'Available' : 'Not available'}`);
-  if (!hasRefreshToken) {
-    console.log(`   To authenticate: Visit http://localhost:${config.server.port}/oauth`);
-  }
+  
+  return userClientData;
 }
 
 /**
@@ -168,12 +172,11 @@ function initializeTwitterClient() {
  * @param {string} text - Tweet text
  * @param {Buffer} imageBuffer - Optional image buffer (not implemented)
  * @param {string} quoteTweetId - Optional tweet ID to quote (OG post)
+ * @param {string} userId - User ID to post as (e.g., 'github:123456')
  */
-async function postTweet(text, imageBuffer = null, quoteTweetId = null) {
-  // Initialize client if not already initialized
-  if (!isInitialized) {
-    initializeTwitterClient();
-  }
+async function postTweet(text, imageBuffer = null, quoteTweetId = null, userId = 'default') {
+  // Initialize client for this user
+  const { client: twitterClient, authClient: authClientRef } = initializeTwitterClient(userId);
 
   // Validate tweet text
   if (!text || typeof text !== 'string') {
@@ -209,12 +212,12 @@ async function postTweet(text, imageBuffer = null, quoteTweetId = null) {
       throw new Error('Failed to get tweet ID from response');
     }
 
-    console.log(`✅ Tweet posted: ${response.data.id}`);
+    console.log(`✅ Tweet posted for user ${userId}: ${response.data.id}`);
     return response.data.id;
 
   } catch (error) {
     // Log detailed error information
-    console.error('❌ Error posting tweet:', error);
+    console.error(`❌ Error posting tweet for user ${userId}:`, error);
     
     // Log the actual Twitter API error details if available
     if (error.error && error.error.errors) {
@@ -246,7 +249,7 @@ async function postTweet(text, imageBuffer = null, quoteTweetId = null) {
       // Try to refresh token and retry if we have auth client
       if (authClientRef && oauthHandler) {
         try {
-          console.log('🔄 Access token expired, attempting refresh...');
+          console.log(`🔄 Access token expired for user ${userId}, attempting refresh...`);
           await authClientRef.refreshAccessToken();
           console.log('✅ Token refreshed, retrying tweet post...');
           // Retry the tweet post after refresh
@@ -259,7 +262,7 @@ async function postTweet(text, imageBuffer = null, quoteTweetId = null) {
           console.error('❌ Failed to refresh token:', refreshError.message);
           throw new Error(
             `Token refresh failed: ${refreshError.message}\n` +
-            `Please re-authenticate by visiting http://localhost:${config.server.port}/oauth`
+            `Please re-authenticate by visiting http://localhost:${config.server.port}/auth/x`
           );
         }
       }
@@ -304,41 +307,35 @@ async function postTweet(text, imageBuffer = null, quoteTweetId = null) {
  * Verify credentials using X API v2 Users lookup endpoint
  * Maps to: GET account/verify_credentials (v1.1) → GET /2/users/me (v2)
  * Endpoint: https://docs.x.com/x-api/users/lookup/introduction
+ * @param {string} userId - User ID to verify credentials for
  */
-async function verifyCredentials() {
-  // Initialize client if not already initialized
-  if (!isInitialized) {
-    initializeTwitterClient();
-  }
+async function verifyCredentials(userId = 'default') {
+  // Initialize client for this user
+  const { client: twitterClient } = initializeTwitterClient(userId);
 
   try {
     // X API v2: GET /2/users/me - Get authenticated user
     const response = await twitterClient.users.findMyUser();
     if (response.data && response.data.username) {
-      console.log(`✅ X API authenticated as: @${response.data.username}`);
+      console.log(`✅ X API authenticated as: @${response.data.username} (user: ${userId})`);
       return true;
     }
     return false;
   } catch (error) {
-    console.error('❌ X API authentication failed:', error.message || error.detail);
+    console.error(`❌ X API authentication failed for user ${userId}:`, error.message || error.detail);
     return false;
   }
 }
 
 /**
  * Get X user info (username, profile picture, etc.)
+ * @param {string} userId - User ID to get X info for (e.g., 'github:123456')
  */
-async function getXUserInfo() {
-  // Initialize client if not already initialized
-  if (!isInitialized) {
-    initializeTwitterClient();
-  }
-
-  if (!twitterClient) {
-    return null;
-  }
-
+async function getXUserInfo(userId = 'default') {
   try {
+    // Initialize client for this user
+    const { client: twitterClient } = initializeTwitterClient(userId);
+
     // X API v2: GET /2/users/me - Get authenticated user with profile info
     // username and name are default fields, profile_image_url needs to be requested
     const response = await twitterClient.users.findMyUser({
@@ -355,7 +352,7 @@ async function getXUserInfo() {
     }
     return null;
   } catch (error) {
-    console.error('❌ Failed to get X user info:', error.message || error.detail);
+    console.error(`❌ Failed to get X user info for user ${userId}:`, error.message || error.detail);
     return null;
   }
 }

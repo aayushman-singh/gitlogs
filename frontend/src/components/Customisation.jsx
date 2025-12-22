@@ -158,22 +158,20 @@ function TemplateCard({ template, isActive, isPreset, onSelect, onEdit, onDelete
       )}
       
       <div className="template-card-actions">
+        <button 
+          className="btn btn-sm btn-secondary" 
+          onClick={(e) => { e.stopPropagation(); onEdit(template); }}
+        >
+          <HiPencil size={14} />
+          Edit
+        </button>
         {!isPreset && (
-          <>
-            <button 
-              className="btn btn-sm btn-secondary" 
-              onClick={(e) => { e.stopPropagation(); onEdit(template); }}
-            >
-              <HiPencil size={14} />
-              Edit
-            </button>
-            <button 
-              className="btn btn-sm btn-danger" 
-              onClick={(e) => { e.stopPropagation(); onDelete(template.id); }}
-            >
-              <HiTrash size={14} />
-            </button>
-          </>
+          <button 
+            className="btn btn-sm btn-danger" 
+            onClick={(e) => { e.stopPropagation(); onDelete(template.id); }}
+          >
+            <HiTrash size={14} />
+          </button>
         )}
         {!isActive && (
           <button 
@@ -189,10 +187,38 @@ function TemplateCard({ template, isActive, isPreset, onSelect, onEdit, onDelete
   );
 }
 
+// Helper function to parse template content (handles both old and new formats)
+function parseTemplateContent(content) {
+  if (!content) return { template: '', prompt: '' };
+  
+  // Try to parse as JSON (new format)
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed.template !== undefined && parsed.prompt !== undefined) {
+      return { template: parsed.template || '', prompt: parsed.prompt || '' };
+    }
+  } catch (e) {
+    // Not JSON, treat as old format (just prompt)
+  }
+  
+  // Old format: entire content is the prompt, template is empty
+  return { template: '', prompt: content };
+}
+
+// Helper function to combine template and prompt for saving
+function combineTemplateContent(template, prompt) {
+  return JSON.stringify({ template: template || '', prompt: prompt || '' });
+}
+
 // Template editor modal
-function TemplateEditorModal({ isOpen, onClose, onSave, template, variables, user, xUserInfo }) {
+function TemplateEditorModal({ isOpen, onClose, onSave, template, variables, user, xUserInfo, existingTemplates = [], presets = [] }) {
   const [name, setName] = useState('');
-  const [content, setContent] = useState('');
+  const [templateText, setTemplateText] = useState(''); // The actual tweet template
+  const [promptText, setPromptText] = useState(''); // AI instructions
+  const [originalTemplate, setOriginalTemplate] = useState('');
+  const [originalPrompt, setOriginalPrompt] = useState('');
+  const [originalName, setOriginalName] = useState('');
+  const [isPreset, setIsPreset] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [showVariables, setShowVariables] = useState(false);
@@ -200,7 +226,18 @@ function TemplateEditorModal({ isOpen, onClose, onSave, template, variables, use
   
   // Use actual user data for preview
   const previewData = {
+    // Template variables
+    PROJECT_CONTEXT: 'A developer tool for automating commit logs to social media',
+    REPOSITORY: 'aayushman-singh/gitlogs',
+    COMMIT_TYPE: 'feat',
     COMMIT_MESSAGE: 'Add realtime tweet preview to template editor',
+    FILES_CHANGED: '3',
+    ADDED_FILES: '- Added Files: Customisation.jsx',
+    MODIFIED_FILES: '- Modified Files: api.js, server.js',
+    REMOVED_FILES: '',
+    AUTHOR: xUserInfo?.username || user?.login || 'developer',
+    BRANCH: 'main',
+    // Additional preview data
     REPO_NAME: 'gitlogs',
     REPO_FULL_NAME: 'aayushman-singh/gitlogs',
     AUTHOR_NAME: xUserInfo?.name || user?.name || user?.login || 'Developer',
@@ -208,8 +245,6 @@ function TemplateEditorModal({ isOpen, onClose, onSave, template, variables, use
     AUTHOR_AVATAR: xUserInfo?.profileImageUrl || user?.avatar_url || null,
     COMMIT_URL: 'https://github.com/aayushman-singh/gitlogs/commit/abc1234',
     COMMIT_SHA: 'abc1234',
-    BRANCH: 'main',
-    FILES_CHANGED: '3 files',
     ADDITIONS: '+128',
     DELETIONS: '-12',
     DATE: 'Mar 28, 2024',
@@ -223,35 +258,117 @@ function TemplateEditorModal({ isOpen, onClose, onSave, template, variables, use
 
   useEffect(() => {
     if (template) {
-      setName(template.name || '');
-      setContent(template.template || '');
+      const templateName = template.name || '';
+      const templateContent = template.template || '';
+      const parsed = parseTemplateContent(templateContent);
+      
+      setOriginalName(templateName);
+      setOriginalTemplate(parsed.template);
+      setOriginalPrompt(parsed.prompt);
+      
+      // Check if this is a preset template
+      const isPresetTemplate = presets.some(p => p.id === template.id);
+      setIsPreset(isPresetTemplate);
+      
+      // If it's a preset, suggest a modified name to avoid conflicts
+      if (isPresetTemplate) {
+        const allTemplateNames = [
+          ...presets.map(p => p.name.toLowerCase()),
+          ...existingTemplates.map(t => t.name.toLowerCase())
+        ];
+        let suggestedName = `${templateName} (Custom)`;
+        let counter = 1;
+        while (allTemplateNames.includes(suggestedName.toLowerCase())) {
+          suggestedName = `${templateName} (Custom ${counter})`;
+          counter++;
+        }
+        setName(suggestedName);
+      } else {
+        setName(templateName);
+      }
+      
+      setTemplateText(parsed.template);
+      setPromptText(parsed.prompt);
     } else {
       setName('');
-      setContent('');
+      setTemplateText('');
+      setPromptText('');
+      setOriginalName('');
+      setOriginalTemplate('');
+      setOriginalPrompt('');
+      setIsPreset(false);
     }
     setError('');
-  }, [template, isOpen]);
+  }, [template, isOpen, presets, existingTemplates]);
 
   const handleSave = async () => {
     if (!name.trim()) {
       setError('Template name is required');
       return;
     }
-    if (!content.trim()) {
-      setError('Template content is required');
+    if (!templateText.trim() && !promptText.trim()) {
+      setError('Either template or prompt is required');
       return;
     }
-    if (content.length > MAX_TEMPLATE_LENGTH) {
-      setError(`Template content must be ${MAX_TEMPLATE_LENGTH} characters or less`);
+    
+    // Validate template length (the actual tweet template)
+    const renderedTemplate = renderPreview(templateText);
+    if (renderedTemplate.length > MAX_TEMPLATE_LENGTH) {
+      setError(`Rendered template would be ${renderedTemplate.length} characters (max ${MAX_TEMPLATE_LENGTH}). Please shorten it.`);
       return;
+    }
+
+    const trimmedName = name.trim();
+    const trimmedTemplate = templateText.trim();
+    const trimmedPrompt = promptText.trim();
+    
+    // Combine template and prompt for saving
+    const combinedContent = combineTemplateContent(trimmedTemplate, trimmedPrompt);
+    
+    // Check for name conflicts with existing templates (presets or custom)
+    const allTemplateNames = [
+      ...presets.map(p => p.name.toLowerCase()),
+      ...existingTemplates.map(t => t.name.toLowerCase())
+    ];
+    
+    // If it's a preset, always save as new (don't allow overwriting presets)
+    if (isPreset) {
+      // Check if name conflicts with existing templates
+      if (allTemplateNames.includes(trimmedName.toLowerCase())) {
+        const conflictingTemplate = existingTemplates.find(t => t.name.toLowerCase() === trimmedName.toLowerCase()) ||
+                                    presets.find(p => p.name.toLowerCase() === trimmedName.toLowerCase());
+        
+        if (conflictingTemplate) {
+          setError(`A template with the name "${trimmedName}" already exists. Please choose a different name.`);
+          return;
+        }
+      }
+    } else if (template?.id) {
+      // Editing an existing custom template - check if name conflicts (excluding current template)
+      const conflictingTemplate = existingTemplates.find(t => 
+        t.id !== template.id && t.name.toLowerCase() === trimmedName.toLowerCase()
+      ) || presets.find(p => p.name.toLowerCase() === trimmedName.toLowerCase());
+      
+      if (conflictingTemplate) {
+        setError(`A template with the name "${trimmedName}" already exists. Please choose a different name.`);
+        return;
+      }
+    } else {
+      // Creating a new template - check if name conflicts
+      if (allTemplateNames.includes(trimmedName.toLowerCase())) {
+        setError(`A template with the name "${trimmedName}" already exists. Please choose a different name.`);
+        return;
+      }
     }
 
     setSaving(true);
     setError('');
     
     try {
-      const templateId = template?.id || `custom-${Date.now()}`;
-      await onSave(templateId, name.trim(), content.trim());
+      // If editing a preset, always create a new template (don't use preset ID)
+      // For custom templates, use existing ID if editing, otherwise create new
+      const templateId = isPreset ? `custom-${Date.now()}` : (template?.id || `custom-${Date.now()}`);
+      await onSave(templateId, trimmedName, combinedContent);
       onClose();
     } catch (err) {
       setError(err.message || 'Failed to save template');
@@ -261,7 +378,7 @@ function TemplateEditorModal({ isOpen, onClose, onSave, template, variables, use
   };
 
   const insertVariable = (variable) => {
-    setContent(prev => prev + variable);
+    setTemplateText(prev => prev + variable);
   };
 
   const renderPreview = (templateContent) => {
@@ -281,7 +398,7 @@ function TemplateEditorModal({ isOpen, onClose, onSave, template, variables, use
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content modal-lg" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>{template?.id ? 'Edit Template' : 'Create Custom Template'}</h2>
+          <h2>{isPreset ? 'Edit Template (Save as New)' : (template?.id ? 'Edit Template' : 'Create Custom Template')}</h2>
           <button className="modal-close" onClick={onClose}>
             <HiX size={20} />
           </button>
@@ -301,75 +418,52 @@ function TemplateEditorModal({ isOpen, onClose, onSave, template, variables, use
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g., My Custom Style"
             />
+            {isPreset && (
+              <p className="text-small text-muted" style={{ marginTop: 4 }}>
+                This is a preset template. Changes will be saved as a new custom template with a different name.
+              </p>
+            )}
           </div>
 
           <div className="template-editor-grid">
             <div className="template-editor-main">
               <div className="form-group">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <label className="form-label" style={{ marginBottom: 0 }}>Template Content</label>
-                  <button 
-                    className="btn btn-sm btn-secondary"
-                    onClick={() => setShowVariables(!showVariables)}
-                  >
-                    <HiCode size={14} />
-                    {showVariables ? 'Hide Variables' : 'Show Variables'}
-                  </button>
-                </div>
-                
-                {showVariables && (
-                  <div className="variables-panel">
-                    <div className="variables-header">
-                      <HiInformationCircle size={16} />
-                      <span>Available Variables - Click to insert</span>
-                    </div>
-                    <div className="variables-grid">
-                      {Object.entries(variables || {}).map(([key, desc]) => (
-                        <button 
-                          key={key} 
-                          className="variable-chip"
-                          onClick={() => insertVariable(key)}
-                          title={desc}
-                        >
-                          {key}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="variables-legend">
-                      <p className="text-small text-muted">
-                        <strong>Legend:</strong>
-                      </p>
-                      <ul className="variables-list">
-                        {Object.entries(variables || {}).map(([key, desc]) => (
-                          <li key={key}>
-                            <code>{key}</code> - {desc}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                )}
-
+                <label className="form-label">Tweet Template</label>
+                <p className="text-small text-muted" style={{ marginBottom: 8 }}>
+                  This is what will be shown in your tweet. Use variables like {'{{COMMIT_MESSAGE}}'} to include dynamic data. The preview on the right shows exactly how it will look.
+                </p>
                 <textarea
                   className="form-input form-textarea"
-                  value={content}
-                  onChange={(e) => {
-                    if (e.target.value.length <= MAX_TEMPLATE_LENGTH) {
-                      setContent(e.target.value);
-                    }
-                  }}
-                  placeholder="Write your prompt template here. Use variables like {{COMMIT_MESSAGE}} to include dynamic data."
-                  rows={16}
-                  maxLength={MAX_TEMPLATE_LENGTH}
+                  value={templateText}
+                  onChange={(e) => setTemplateText(e.target.value)}
+                  placeholder={`e.g., Just shipped: {{COMMIT_MESSAGE}}\nRepo: {{REPOSITORY}}\n\nOr:\nupdate:\n- {{COMMIT_MESSAGE}}`}
+                  rows={8}
                 />
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                   <p className="text-small text-muted" style={{ margin: 0 }}>
-                    This is the prompt sent to the AI. Use the variables above to include commit details dynamically.
+                    Variables will be replaced with actual commit data.
                   </p>
-                  <span className={`text-small ${content.length > MAX_TEMPLATE_LENGTH * 0.9 ? 'text-warning' : 'text-muted'}`} style={{ marginLeft: 12 }}>
-                    {content.length} / {MAX_TEMPLATE_LENGTH}
+                  <span className="text-small text-muted">
+                    {renderPreview(templateText).length} / {MAX_TEMPLATE_LENGTH} chars (rendered)
                   </span>
                 </div>
+              </div>
+              
+              <div className="form-group" style={{ marginTop: 24 }}>
+                <label className="form-label">AI Instructions (Prompt)</label>
+                <p className="text-small text-muted" style={{ marginBottom: 8 }}>
+                  Instructions for the AI on how to generate the final tweet. Define emoji usage, tone, language, character limits, etc.
+                </p>
+                <textarea
+                  className="form-input form-textarea"
+                  value={promptText}
+                  onChange={(e) => setPromptText(e.target.value)}
+                  placeholder="Define emoji usage, tone, character limits, formatting rules, and other AI instructions."
+                  rows={8}
+                />
+                <p className="text-small text-muted" style={{ marginTop: 8, marginBottom: 0 }}>
+                  These instructions guide the AI in transforming your template into the final tweet.
+                </p>
               </div>
             </div>
 
@@ -409,7 +503,7 @@ function TemplateEditorModal({ isOpen, onClose, onSave, template, variables, use
                   </button>
                 </div>
                 <p className="tweet-preview-body">
-                  {renderPreview(content)}
+                  {renderPreview(templateText)}
                 </p>
                 <div className="tweet-preview-actions">
                   <button className="tweet-preview-action" type="button" aria-label="Reply">
@@ -449,6 +543,50 @@ function TemplateEditorModal({ isOpen, onClose, onSave, template, variables, use
               <p className="text-small text-muted template-preview-caption">
                 Updates as you type so you can keep it tight and readable.
               </p>
+              
+              <div style={{ marginTop: 16 }}>
+                <button 
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => setShowVariables(!showVariables)}
+                  style={{ width: '100%', marginBottom: showVariables ? 12 : 0 }}
+                >
+                  <HiCode size={14} />
+                  {showVariables ? 'Hide Variables' : 'Show Variables'}
+                </button>
+                
+                {showVariables && (
+                  <div className="variables-panel">
+                    <div className="variables-header">
+                      <HiInformationCircle size={16} />
+                      <span>Available Variables - Click to insert</span>
+                    </div>
+                    <div className="variables-grid">
+                      {Object.entries(variables || {}).map(([key, desc]) => (
+                        <button 
+                          key={key} 
+                          className="variable-chip"
+                          onClick={() => insertVariable(key)}
+                          title={desc}
+                        >
+                          {key}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="variables-legend">
+                      <p className="text-small text-muted">
+                        <strong>Legend:</strong>
+                      </p>
+                      <ul className="variables-list">
+                        {Object.entries(variables || {}).map(([key, desc]) => (
+                          <li key={key}>
+                            <code>{key}</code> - {desc}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -541,12 +679,12 @@ export default function Customisation({ user, xConnected }) {
     // Find the full template with content
     const fullTemplate = customTemplates.find(t => t.id === template.id) || template;
     
-    // If it's a preset, get the preset template content
+    // If it's a preset, get the preset template content but keep the preset ID for tracking
     const preset = presets.find(p => p.id === template.id);
     if (preset) {
       setEditingTemplate({
-        id: null, // Force new template creation
-        name: `${preset.name} (Custom)`,
+        id: preset.id, // Keep preset ID to track it's a preset
+        name: preset.name,
         template: preset.template
       });
     } else {
@@ -685,6 +823,8 @@ export default function Customisation({ user, xConnected }) {
         variables={TEMPLATE_VARIABLES}
         user={user}
         xUserInfo={xUserInfo}
+        existingTemplates={customTemplates}
+        presets={presets}
       />
     </div>
   );

@@ -325,9 +325,14 @@ async function getOgPost(repoName) {
 }
 
 // ============================================
-// OAuth Token Functions
+// OAuth Token Functions (X/Twitter - per-user)
 // ============================================
 
+/**
+ * Store X OAuth token for a specific user
+ * @param {object} token - OAuth token object
+ * @param {string} userId - User ID (use GitHub user ID like 'github:123456' for per-user tokens)
+ */
 function storeOAuthToken(token, userId = 'default') {
   if (!ensureDb()) {
     return storeOAuthTokenFile(token, userId);
@@ -339,7 +344,7 @@ function storeOAuthToken(token, userId = 'default') {
       'INSERT INTO oauth_tokens (user_id, token, expires_at, refresh_token) VALUES (?, ?, ?, ?)',
       [userId, JSON.stringify(token), token.expires_at || 0, token.refresh_token || null]
     );
-    console.log(`💾 OAuth token stored in database for user: ${userId}`);
+    console.log(`💾 X OAuth token stored in database for user: ${userId}`);
     return true;
   } catch (error) {
     console.error('❌ Error storing OAuth token:', error);
@@ -347,12 +352,18 @@ function storeOAuthToken(token, userId = 'default') {
   }
 }
 
+/**
+ * Get X OAuth token for a specific user
+ * Falls back to 'default' if user-specific token not found (for backward compatibility)
+ * @param {string} userId - User ID to get token for
+ */
 function getOAuthToken(userId = 'default') {
   if (!ensureDb()) {
     return getOAuthTokenFile(userId);
   }
   
-  const row = getOne(
+  // Try user-specific token first
+  let row = getOne(
     'SELECT token FROM oauth_tokens WHERE user_id = ? ORDER BY expires_at DESC LIMIT 1',
     [userId]
   );
@@ -361,9 +372,25 @@ function getOAuthToken(userId = 'default') {
     return JSON.parse(row.token);
   }
   
+  // Fall back to 'default' for backward compatibility (only if not already querying default)
+  if (userId !== 'default') {
+    row = getOne(
+      'SELECT token FROM oauth_tokens WHERE user_id = ? ORDER BY expires_at DESC LIMIT 1',
+      ['default']
+    );
+    if (row && row.token) {
+      console.log(`⚠️  Using legacy 'default' X OAuth token for user: ${userId}`);
+      return JSON.parse(row.token);
+    }
+  }
+  
   return getOAuthTokenFile(userId);
 }
 
+/**
+ * Check if X OAuth token is valid for a specific user
+ * @param {string} userId - User ID to check
+ */
 function isOAuthTokenValid(userId = 'default') {
   const token = getOAuthToken(userId);
   if (!token) return false;
@@ -371,13 +398,18 @@ function isOAuthTokenValid(userId = 'default') {
   return Date.now() / 1000 < expiresAt;
 }
 
+/**
+ * Get X OAuth refresh token for a specific user
+ * @param {string} userId - User ID to get refresh token for
+ */
 function getRefreshToken(userId = 'default') {
   if (!ensureDb()) {
     const token = getOAuthTokenFile(userId);
     return token ? token.refresh_token : null;
   }
   
-  const row = getOne(
+  // Try user-specific token first
+  let row = getOne(
     'SELECT refresh_token FROM oauth_tokens WHERE user_id = ? ORDER BY expires_at DESC LIMIT 1',
     [userId]
   );
@@ -386,8 +418,42 @@ function getRefreshToken(userId = 'default') {
     return row.refresh_token;
   }
   
+  // Fall back to 'default' for backward compatibility
+  if (userId !== 'default') {
+    row = getOne(
+      'SELECT refresh_token FROM oauth_tokens WHERE user_id = ? ORDER BY expires_at DESC LIMIT 1',
+      ['default']
+    );
+    if (row && row.refresh_token) {
+      return row.refresh_token;
+    }
+  }
+  
   const token = getOAuthTokenFile(userId);
   return token ? token.refresh_token : null;
+}
+
+/**
+ * Delete X OAuth token for a specific user
+ * @param {string} userId - User ID to delete token for
+ */
+function deleteOAuthToken(userId) {
+  if (!ensureDb()) return false;
+  
+  const success = run('DELETE FROM oauth_tokens WHERE user_id = ?', [userId]);
+  if (success) {
+    console.log(`🗑️ X OAuth token deleted for user: ${userId}`);
+  }
+  return success;
+}
+
+/**
+ * Get X OAuth user ID for a GitHub user (maps github user to their X auth)
+ * Returns the userId to use for X OAuth operations
+ * @param {string} githubUserId - GitHub user ID (without 'github:' prefix)
+ */
+function getXOAuthUserId(githubUserId) {
+  return `github:${githubUserId}`;
 }
 
 // ============================================
@@ -801,11 +867,13 @@ module.exports = {
   setOgPost,
   getOgPost,
   
-  // OAuth functions
+  // X OAuth functions (per-user)
   storeOAuthToken,
   getOAuthToken,
   isOAuthTokenValid,
   getRefreshToken,
+  deleteOAuthToken,
+  getXOAuthUserId,
   
   // User management
   upsertUser,
