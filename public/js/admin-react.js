@@ -214,7 +214,7 @@ function OgPostsTab({ apiCall, canUse }) {
         </div>
         <div className="quick-actions">
           <button className="btn btn-primary" onClick=${setOgPost} disabled=${isLoading}>
-            ${isLoading ? 'Saving...' : 'Set OG Post'}
+            ${isLoading ? 'Saving...' : 'Launch post'}
           </button>
           <button className="btn btn-secondary" onClick=${getOgPost} disabled=${isLoading}>
             ${isLoading ? 'Loading...' : 'Get Current OG Post'}
