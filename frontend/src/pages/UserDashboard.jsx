@@ -52,7 +52,9 @@ export default function UserDashboard() {
       
       if (userData?.user) {
         setUser(userData.user);
-        setXConnected(Boolean(userData.xConnected));
+        // Explicitly set xConnected based on API response
+        const isConnected = Boolean(userData.xConnected);
+        setXConnected(isConnected);
         
         // Load repos
         const [reposData, healthData] = await Promise.all([
@@ -63,11 +65,15 @@ export default function UserDashboard() {
         setRepos(reposData.repos || []);
         setHealth(healthData);
         setRepoPage(1);
+      } else {
+        // No user data, ensure xConnected is false
+        setXConnected(false);
       }
     } catch (e) {
       // Not authenticated - that's fine, show login screen
       console.log('Not authenticated');
       setUser(null);
+      setXConnected(false);
     }
     setLoading(false);
   };
@@ -153,14 +159,12 @@ export default function UserDashboard() {
     setDisconnecting(true);
     try {
       await disconnectX();
-      setXConnected(false);
       setDisconnectModalOpen(false);
       showToast('X account disconnected successfully', 'success');
-      // Reload user data to reflect the change
-      loadUserAndRepos();
+      // Reload user data to reflect the change - wait for it to complete
+      await loadUserAndRepos();
     } catch (e) {
       showToast(e.message || 'Failed to disconnect X account');
-    } finally {
       setDisconnecting(false);
     }
   };

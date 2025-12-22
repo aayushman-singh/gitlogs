@@ -454,14 +454,45 @@ function getRefreshToken(userId = 'default') {
 
 /**
  * Delete X OAuth token for a specific user
+ * Deletes from both database and file storage
  * @param {string} userId - User ID to delete token for
  */
 function deleteOAuthToken(userId) {
-  if (!ensureDb()) return false;
+  let dbSuccess = false;
+  let fileSuccess = false;
   
-  const success = run('DELETE FROM oauth_tokens WHERE user_id = ?', [userId]);
+  // Delete from database if available
+  if (ensureDb()) {
+    dbSuccess = run('DELETE FROM oauth_tokens WHERE user_id = ?', [userId]);
+    if (dbSuccess) {
+      console.log(`🗑️ X OAuth token deleted from database for user: ${userId}`);
+    }
+  }
+  
+  // Also delete from file storage
+  try {
+    if (fs.existsSync(TOKEN_FILE_PATH)) {
+      const tokens = JSON.parse(fs.readFileSync(TOKEN_FILE_PATH, 'utf8'));
+      if (tokens[userId]) {
+        delete tokens[userId];
+        fs.writeFileSync(TOKEN_FILE_PATH, JSON.stringify(tokens, null, 2), 'utf8');
+        fileSuccess = true;
+        console.log(`🗑️ X OAuth token deleted from file for user: ${userId}`);
+      } else {
+        fileSuccess = true; // Token not in file, consider it successful
+      }
+    } else {
+      fileSuccess = true; // No file to delete from, consider it successful
+    }
+  } catch (error) {
+    console.error('❌ Error deleting OAuth token from file:', error);
+  }
+  
+  const success = dbSuccess || fileSuccess;
   if (success) {
-    console.log(`🗑️ X OAuth token deleted for user: ${userId}`);
+    console.log(`✅ X OAuth token deleted successfully for user: ${userId}`);
+  } else {
+    console.error(`❌ Failed to delete X OAuth token for user: ${userId}`);
   }
   return success;
 }
