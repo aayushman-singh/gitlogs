@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
-import { HiRefresh, HiViewList, HiSortAscending, HiLightningBolt, HiAdjustments, HiMenu, HiChevronDown } from 'react-icons/hi';
+import { HiRefresh, HiViewList, HiSortAscending, HiLightningBolt, HiAdjustments, HiMenu, HiChevronDown, HiX } from 'react-icons/hi';
 import { PiGithubLogoBold } from 'react-icons/pi';
-import { getMyRepos, setMyRepoOgPost, getHealth, getBackendUrl, enableRepo, disableRepo, getCurrentUser } from '../utils/api';
+import { getMyRepos, setMyRepoOgPost, getHealth, getBackendUrl, enableRepo, disableRepo, getCurrentUser, disconnectX } from '../utils/api';
 import Customisation from '../components/Customisation';
 import logo from '../../gitlogs.png';
 
@@ -20,6 +20,8 @@ export default function UserDashboard() {
   const [sortBy, setSortBy] = useState('recent');
   const [activeTab, setActiveTab] = useState('actions');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [disconnectModalOpen, setDisconnectModalOpen] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -147,6 +149,22 @@ export default function UserDashboard() {
     }
   };
 
+  const handleDisconnectX = async () => {
+    setDisconnecting(true);
+    try {
+      await disconnectX();
+      setXConnected(false);
+      setDisconnectModalOpen(false);
+      showToast('X account disconnected successfully', 'success');
+      // Reload user data to reflect the change
+      loadUserAndRepos();
+    } catch (e) {
+      showToast(e.message || 'Failed to disconnect X account');
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
   const sortedRepos = [...repos].sort((a, b) => {
     if (sortBy === 'stars') {
       return (b.stargazers_count || 0) - (a.stargazers_count || 0);
@@ -234,7 +252,10 @@ export default function UserDashboard() {
         </div>
         <div className="quick-actions">
           {xConnected ? (
-            <button className="btn btn-x btn-x-connected btn-connect" disabled>
+            <button 
+              className="btn btn-x btn-x-connected btn-connect" 
+              onClick={() => setDisconnectModalOpen(true)}
+            >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '6px' }}>
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
               </svg>
@@ -516,6 +537,46 @@ export default function UserDashboard() {
         {activeTab === 'actions' && <ActionsContent />}
         {activeTab === 'customisation' && <Customisation user={user} xConnected={xConnected} />}
       </div>
+
+      {/* Disconnect X Modal */}
+      {disconnectModalOpen && (
+        <div className="modal-overlay" onClick={() => !disconnecting && setDisconnectModalOpen(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Disconnect X Account</h2>
+              <button 
+                className="modal-close" 
+                onClick={() => !disconnecting && setDisconnectModalOpen(false)}
+                disabled={disconnecting}
+              >
+                <HiX size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>Are you sure you want to disconnect your X account?</p>
+              <p className="text-small text-muted" style={{ marginTop: 8 }}>
+                This will stop all automatic posting to X. You can reconnect at any time.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn-secondary"
+                onClick={() => setDisconnectModalOpen(false)}
+                disabled={disconnecting}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={handleDisconnectX}
+                disabled={disconnecting}
+              >
+                {disconnecting ? 'Disconnecting...' : 'Disconnect'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

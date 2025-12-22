@@ -6,7 +6,7 @@ const config = require('../config/config');
 const webhookHandler = require('./webhookHandler');
 const OAuthHandler = require('./oauthHandler');
 const database = require('./database');
-const { getQueueService } = require('./queueService');
+const { getQueueService, shutdownQueueService } = require('./queueService');
 const githubAuth = require('./githubAuth');
 const { TEMPLATE_VARIABLES, TEMPLATE_PRESETS } = require('./geminiClient');
 
@@ -796,6 +796,29 @@ app.get('/auth/x/callback', async (req, res) => {
   }
 });
 
+// Disconnect X account
+app.post('/api/me/x/disconnect', async (req, res) => {
+  const githubUserId = getGithubUserIdFromCookie(req);
+  if (!githubUserId) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  
+  try {
+    const xOAuthUserId = database.getXOAuthUserId(githubUserId);
+    const success = database.deleteOAuthToken(xOAuthUserId);
+    
+    if (success) {
+      console.log(`🔌 X account disconnected for GitHub user: ${githubUserId}`);
+      res.json({ success: true, message: 'X account disconnected successfully' });
+    } else {
+      res.status(500).json({ error: 'Failed to disconnect X account' });
+    }
+  } catch (error) {
+    console.error('❌ Error disconnecting X account:', error);
+    res.status(500).json({ error: error.message || 'Failed to disconnect X account' });
+  }
+});
+
 // ============================================
 // Webhook
 // ============================================
@@ -1067,7 +1090,7 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = config.server.port;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 Git→X Bot listening on port ${PORT}`);
   console.log(`🌐 Frontend: ${FRONTEND_URL}`);
   console.log(`📡 Webhook: /webhook/github`);
@@ -1080,5 +1103,62 @@ app.listen(PORT, () => {
   }
   console.log(`📊 API: /api/me, /api/me/repos`);
   console.log(`🔒 Webhook secret: ${config.github.webhookSecret ? 'SET' : 'NOT SET'}`);
+  console.log(`💾 Queue persistence: enabled (survives restarts)`);
+});
+
+// ============================================
+// Graceful Shutdown Handling
+// ============================================
+
+let isShuttingDown = false;
+
+async function gracefulShutdown(signal) {
+  if (isShuttingDown) {
+    console.log('⚠️  Shutdown already in progress...');
+    return;
+  }
+  
+  isShuttingDown = true;
+  console.log(`\n🛑 Received ${signal}, starting graceful shutdown...`);
+  
+  // Stop accepting new connections
+  server.close((err) => {
+    if (err) {
+      console.error('❌ Error closing server:', err.message);
+    } else {
+      console.log('✅ Server closed - no new connections');
+    }
+  });
+  
+  try {
+    // Stop queue service (persists pending items)
+    console.log('💾 Stopping queue service...');
+    shutdownQueueService();
+    
+    // Close database connection (saves and closes)
+    console.log('💾 Closing database...');
+    database.closeDatabase();
+    
+    console.log('✅ Graceful shutdown complete');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error during shutdown:', error.message);
+    process.exit(1);
+  }
+}
+
+// Handle different shutdown signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle uncaught exceptions gracefully
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  gracefulShutdown('uncaughtException');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit on unhandled rejections, just log them
 });
 

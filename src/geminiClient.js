@@ -1,8 +1,14 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const config = require('../config/config');
-const { getQueueService, PRIORITY } = require('./queueService');
+const { getQueueService, registerTaskType, PRIORITY } = require('./queueService');
 const database = require('./database');
 const repoIndexer = require('./repoIndexer');
+
+// Task types for queue persistence
+const TASK_TYPES = {
+  CHANGELOG: 'gemini_changelog',
+  DETAILED_CHANGELOG: 'gemini_detailed_changelog'
+};
 
 // Default prompt template - the original one
 const DEFAULT_PROMPT_TEMPLATE = `You are a developer writing a log entry about your work. Write in a concise, technical style with bullet points.
@@ -249,6 +255,102 @@ let genAI = null;
 let model = null;
 let queueService = null;
 
+/**
+ * Create a changelog generation task function
+ * This is used both for direct execution and task reconstruction on restart
+ */
+function createChangelogTask(data) {
+  return async () => {
+    if (!model) {
+      return data.commitData?.message || 'No model available';
+    }
+    
+    const { commitData, repository, userId, repoContext } = data;
+    
+    const context = {
+      commitMessage: commitData.message,
+      commitType: commitData.type || 'change',
+      repository: repository.name,
+      filesChanged: commitData.filesChanged,
+      addedFiles: commitData.added || [],
+      modifiedFiles: commitData.modified || [],
+      removedFiles: commitData.removed || [],
+      author: commitData.author || '',
+      branch: commitData.branch || 'main'
+    };
+
+    // Build enhanced prompt with repo context
+    const projectContext = buildEnhancedPrompt(commitData, repository, repoContext);
+
+    // Get user's custom template or use default
+    const promptTemplate = getPromptTemplateForUser(userId);
+    const prompt = buildPromptFromTemplate(promptTemplate, context, projectContext);
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    let changelog = response.text();
+    
+    // Safety check for empty or invalid response
+    if (!changelog || typeof changelog !== 'string') {
+      console.warn('⚠️  Gemini returned invalid response, using commit message');
+      return commitData.message;
+    }
+    
+    changelog = changelog.trim();
+
+    // Track API usage
+    database.trackApiUsage(userId, 'gemini');
+
+    console.log('🤖 Gemini generated changelog:', changelog.length > 0 ? changelog.substring(0, 100) + '...' : '(empty)');
+    return changelog;
+  };
+}
+
+/**
+ * Create a detailed changelog generation task function
+ */
+function createDetailedChangelogTask(data) {
+  return async () => {
+    if (!model) {
+      return data.commitData?.message || 'No model available';
+    }
+    
+    const { commitData, repository, userId, repoContext } = data;
+    
+    const context = {
+      commitMessage: commitData.message,
+      commitType: commitData.type || 'change',
+      repository: repository.name,
+      filesChanged: commitData.filesChanged
+    };
+
+    const projectContext = buildEnhancedPrompt(commitData, repository, repoContext);
+
+    const prompt = `Create a detailed changelog entry for this commit:
+${projectContext}
+Repository: ${context.repository}
+Type: ${context.commitType}
+Message: ${context.commitMessage}
+Files Changed: ${context.filesChanged}
+
+Generate a well-formatted changelog entry (2-3 sentences) that explains:
+- What was changed
+- Why it matters
+- Any notable improvements
+
+Use the PROJECT CONTEXT above to provide more insightful commentary about the changes.
+Format as markdown if appropriate.`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    
+    // Track API usage
+    database.trackApiUsage(userId, 'gemini');
+    
+    return response.text().trim();
+  };
+}
+
 function initGemini() {
   if (!config.gemini.apiKey) {
     console.warn('⚠️  Gemini API key not set - changelog generation disabled');
@@ -266,7 +368,13 @@ function initGemini() {
       maxRetries: config.queue?.maxRetries || 3
     });
     
+    // Register task factories for queue persistence
+    // These allow the queue to reconstruct tasks after server restart
+    registerTaskType(TASK_TYPES.CHANGELOG, createChangelogTask);
+    registerTaskType(TASK_TYPES.DETAILED_CHANGELOG, createDetailedChangelogTask);
+    
     console.log(`✅ Gemini AI initialized with model: ${modelName}`);
+    console.log(`📝 Registered ${Object.keys(TASK_TYPES).length} task types for queue persistence`);
     return true;
   } catch (error) {
     console.error('❌ Failed to initialize Gemini:', error.message);
@@ -331,45 +439,30 @@ async function generateChangelog(commitData, repository, options = {}) {
     return commitData.message;
   }
 
-  // Create the task function
-  const generateTask = async () => {
-    const context = {
-      commitMessage: commitData.message,
-      commitType: commitData.type || 'change',
-      repository: repository.name,
+  // Prepare task data (must be serializable for persistence)
+  const taskData = {
+    commitData: {
+      message: commitData.message,
+      type: commitData.type,
       filesChanged: commitData.filesChanged,
-      addedFiles: commitData.added || [],
-      modifiedFiles: commitData.modified || [],
-      removedFiles: commitData.removed || [],
+      added: commitData.added || [],
+      modified: commitData.modified || [],
+      removed: commitData.removed || [],
       author: commitData.author || '',
-      branch: commitData.branch || 'main'
-    };
-
-    // Build enhanced prompt with repo context
-    const projectContext = buildEnhancedPrompt(commitData, repository, repoContext);
-
-    // Get user's custom template or use default
-    const promptTemplate = getPromptTemplateForUser(userId);
-    const prompt = buildPromptFromTemplate(promptTemplate, context, projectContext);
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    let changelog = response.text();
-    
-    // Safety check for empty or invalid response
-    if (!changelog || typeof changelog !== 'string') {
-      console.warn('⚠️  Gemini returned invalid response, using commit message');
-      return commitData.message;
-    }
-    
-    changelog = changelog.trim();
-
-    // Track API usage
-    database.trackApiUsage(userId, 'gemini');
-
-    console.log('🤖 Gemini generated changelog:', changelog.length > 0 ? changelog.substring(0, 100) + '...' : '(empty)');
-    return changelog;
+      branch: commitData.branch || 'main',
+      sha: commitData.sha
+    },
+    repository: {
+      name: repository.name,
+      full_name: repository.full_name,
+      description: repository.description
+    },
+    userId,
+    repoContext
   };
+
+  // Create the task function using the factory
+  const generateTask = createChangelogTask(taskData);
 
   // Use queue service if available, otherwise direct call
   if (queueService) {
@@ -377,8 +470,9 @@ async function generateChangelog(commitData, repository, options = {}) {
       const result = await queueService.enqueue({
         id: `changelog-${commitData.sha || Date.now()}`,
         userId,
+        taskType: TASK_TYPES.CHANGELOG, // Required for persistence
         task: generateTask,
-        data: { commitData, repository },
+        data: taskData, // Serializable data for reconstruction
         priority
       });
       return result;
@@ -416,39 +510,25 @@ async function generateDetailedChangelog(commitData, repository, options = {}) {
     return commitData.message;
   }
 
-  const generateTask = async () => {
-    const context = {
-      commitMessage: commitData.message,
-      commitType: commitData.type || 'change',
-      repository: repository.name,
-      filesChanged: commitData.filesChanged
-    };
-
-    const projectContext = buildEnhancedPrompt(commitData, repository, repoContext);
-
-    const prompt = `Create a detailed changelog entry for this commit:
-${projectContext}
-Repository: ${context.repository}
-Type: ${context.commitType}
-Message: ${context.commitMessage}
-Files Changed: ${context.filesChanged}
-
-Generate a well-formatted changelog entry (2-3 sentences) that explains:
-- What was changed
-- Why it matters
-- Any notable improvements
-
-Use the PROJECT CONTEXT above to provide more insightful commentary about the changes.
-Format as markdown if appropriate.`;
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    
-    // Track API usage
-    database.trackApiUsage(userId, 'gemini');
-    
-    return response.text().trim();
+  // Prepare task data (must be serializable for persistence)
+  const taskData = {
+    commitData: {
+      message: commitData.message,
+      type: commitData.type,
+      filesChanged: commitData.filesChanged,
+      sha: commitData.sha
+    },
+    repository: {
+      name: repository.name,
+      full_name: repository.full_name,
+      description: repository.description
+    },
+    userId,
+    repoContext
   };
+
+  // Create the task function using the factory
+  const generateTask = createDetailedChangelogTask(taskData);
 
   // Use queue service if available
   if (queueService) {
@@ -456,8 +536,9 @@ Format as markdown if appropriate.`;
       return await queueService.enqueue({
         id: `detailed-${commitData.sha || Date.now()}`,
         userId,
+        taskType: TASK_TYPES.DETAILED_CHANGELOG, // Required for persistence
         task: generateTask,
-        data: { commitData, repository },
+        data: taskData, // Serializable data for reconstruction
         priority
       });
     } catch (error) {

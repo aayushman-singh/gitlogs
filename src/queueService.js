@@ -1,9 +1,16 @@
 /**
  * Queue Service - Manages API request queuing with rate limiting and retry logic
  * Designed for multi-user commercial deployment
+ * 
+ * Features:
+ * - Persistent queue storage in SQLite (survives server restarts)
+ * - Task type registry for reconstructing tasks on restart
+ * - Rate limiting and exponential backoff
+ * - Priority-based processing
  */
 
 const config = require('../config/config');
+const database = require('./database');
 
 // Queue states
 const QUEUE_STATUS = {
@@ -21,6 +28,20 @@ const PRIORITY = {
   LOW: 3
 };
 
+// Task type registry - maps task types to their factory functions
+// This allows us to reconstruct tasks from persisted data
+const taskRegistry = new Map();
+
+/**
+ * Register a task type for persistence support
+ * @param {string} taskType - Unique identifier for the task type
+ * @param {function} taskFactory - Function that takes (data) and returns the task function
+ */
+function registerTaskType(taskType, taskFactory) {
+  taskRegistry.set(taskType, taskFactory);
+  console.log(`📝 Registered task type: ${taskType}`);
+}
+
 class QueueService {
   constructor(options = {}) {
     // Queue configuration
@@ -30,7 +51,7 @@ class QueueService {
     this.maxRetryDelayMs = options.maxRetryDelayMs || config.queue?.maxRetryDelayMs || 60000;
     this.processingIntervalMs = options.processingIntervalMs || 1000;
     
-    // Queue storage (in-memory - use Redis for production scaling)
+    // Queue storage (in-memory working queue, backed by database)
     this.queue = [];
     this.processing = new Map(); // Currently processing items
     this.completed = new Map(); // Recently completed (for deduplication)
@@ -42,7 +63,8 @@ class QueueService {
       totalFailed: 0,
       totalRetries: 0,
       currentQueueLength: 0,
-      avgProcessingTimeMs: 0
+      avgProcessingTimeMs: 0,
+      restoredFromDb: 0
     };
     
     // Processing state
@@ -53,32 +75,134 @@ class QueueService {
     this.userQuotas = new Map();
     this.userQuotaLimit = options.userQuotaLimit || 100; // Per hour
     
-    console.log(`📋 Queue service initialized (rate: ${this.maxRequestsPerMinute} req/min, retries: ${this.maxRetries})`);
+    // Persistence enabled flag
+    this.persistenceEnabled = true;
+    
+    console.log(`📋 Queue service initialized (rate: ${this.maxRequestsPerMinute} req/min, retries: ${this.maxRetries}, persistence: enabled)`);
   }
 
   /**
    * Start the queue processor
+   * Restores pending items from database on startup
    */
   start() {
     if (this.isRunning) return;
     
     this.isRunning = true;
+    
+    // Restore pending items from database
+    this.restoreFromDatabase();
+    
+    // Clean up old items periodically (every hour)
+    this.cleanupInterval = setInterval(() => {
+      database.cleanupOldQueueItems();
+    }, 60 * 60 * 1000);
+    
     this.processingInterval = setInterval(() => this.processQueue(), this.processingIntervalMs);
     console.log('🚀 Queue processor started');
   }
 
   /**
-   * Stop the queue processor
+   * Stop the queue processor gracefully
+   * Persists current state before stopping
    */
   stop() {
     if (!this.isRunning) return;
     
     this.isRunning = false;
+    
     if (this.processingInterval) {
       clearInterval(this.processingInterval);
       this.processingInterval = null;
     }
+    
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+    
+    // Items in the queue are already persisted, so we just need to log
+    const pendingCount = this.queue.length + this.processing.size;
+    if (pendingCount > 0) {
+      console.log(`💾 Queue stopped with ${pendingCount} pending items (will resume on restart)`);
+    }
+    
     console.log('⏹️  Queue processor stopped');
+  }
+
+  /**
+   * Restore pending queue items from database
+   * Called on startup to resume processing
+   */
+  restoreFromDatabase() {
+    try {
+      // Reset any items that were "processing" when server stopped
+      database.resetProcessingQueueItems();
+      
+      // Get all pending/retrying items
+      const pendingItems = database.getPendingQueueItems();
+      
+      if (pendingItems.length === 0) {
+        console.log('📋 No pending queue items to restore');
+        return;
+      }
+      
+      console.log(`🔄 Restoring ${pendingItems.length} pending queue items from database...`);
+      
+      let restored = 0;
+      for (const item of pendingItems) {
+        // Check if we have a task factory for this task type
+        const taskFactory = taskRegistry.get(item.taskType);
+        
+        if (!taskFactory) {
+          console.warn(`⚠️  Unknown task type: ${item.taskType}, marking as failed`);
+          database.updateQueueItemStatus(item.id, QUEUE_STATUS.FAILED, 'Unknown task type after restart');
+          continue;
+        }
+        
+        try {
+          // Reconstruct the task function
+          const task = taskFactory(item.data);
+          
+          // Add to in-memory queue (don't re-persist, already in DB)
+          const queueItem = {
+            id: item.id,
+            userId: item.userId,
+            taskType: item.taskType,
+            task,
+            data: item.data,
+            priority: item.priority,
+            status: QUEUE_STATUS.PENDING,
+            retryCount: item.retryCount,
+            createdAt: item.createdAt,
+            // These will be set when promise is created on actual processing
+            resolve: null,
+            reject: null,
+            restored: true // Flag to indicate this was restored
+          };
+          
+          // Insert based on priority
+          const insertIndex = this.queue.findIndex(i => i.priority > item.priority);
+          if (insertIndex === -1) {
+            this.queue.push(queueItem);
+          } else {
+            this.queue.splice(insertIndex, 0, queueItem);
+          }
+          
+          restored++;
+        } catch (err) {
+          console.error(`❌ Failed to restore queue item ${item.id}:`, err.message);
+          database.updateQueueItemStatus(item.id, QUEUE_STATUS.FAILED, `Restore failed: ${err.message}`);
+        }
+      }
+      
+      this.stats.restoredFromDb = restored;
+      this.stats.currentQueueLength = this.queue.length;
+      console.log(`✅ Restored ${restored} queue items`);
+      
+    } catch (error) {
+      console.error('❌ Failed to restore queue from database:', error.message);
+    }
   }
 
   /**
@@ -90,6 +214,7 @@ class QueueService {
     const {
       id = this.generateId(),
       userId,
+      taskType, // Required for persistence - identifies how to reconstruct the task
       task,
       data,
       priority = PRIORITY.NORMAL,
@@ -115,6 +240,7 @@ class QueueService {
       const queueItem = {
         id,
         userId,
+        taskType: taskType || 'unknown',
         task,
         data,
         priority,
@@ -131,6 +257,19 @@ class QueueService {
         }
       };
 
+      // Persist to database for durability
+      if (this.persistenceEnabled && taskType) {
+        database.saveQueueItem({
+          id,
+          taskType,
+          userId,
+          data,
+          priority,
+          status: QUEUE_STATUS.PENDING,
+          retryCount: 0
+        });
+      }
+
       // Insert based on priority
       const insertIndex = this.queue.findIndex(item => item.priority > priority);
       if (insertIndex === -1) {
@@ -140,7 +279,7 @@ class QueueService {
       }
 
       this.stats.currentQueueLength = this.queue.length;
-      console.log(`📥 Queued: ${id} (priority: ${priority}, queue size: ${this.queue.length})`);
+      console.log(`📥 Queued: ${id} (type: ${taskType}, priority: ${priority}, queue size: ${this.queue.length})`);
 
       // Increment user quota
       if (userId) {
@@ -171,6 +310,11 @@ class QueueService {
     this.processing.set(item.id, item);
     item.status = QUEUE_STATUS.PROCESSING;
     this.stats.currentQueueLength = this.queue.length;
+    
+    // Update database status
+    if (this.persistenceEnabled) {
+      database.updateQueueItemStatus(item.id, QUEUE_STATUS.PROCESSING);
+    }
 
     const startTime = Date.now();
 
@@ -190,8 +334,17 @@ class QueueService {
       this.processing.delete(item.id);
       this.stats.totalProcessed++;
       
+      // Remove from database (completed successfully)
+      if (this.persistenceEnabled) {
+        database.deleteQueueItem(item.id);
+      }
+      
       console.log(`✅ Processed: ${item.id} (${processingTime}ms)`);
-      item.resolve(result);
+      
+      // For restored items, resolve may not be set
+      if (item.resolve) {
+        item.resolve(result);
+      }
       
       // Cleanup old completed items (keep last 1000)
       if (this.completed.size > 1000) {
@@ -210,6 +363,11 @@ class QueueService {
         item.retryCount++;
         item.status = QUEUE_STATUS.RETRYING;
         this.stats.totalRetries++;
+        
+        // Update database with retry status
+        if (this.persistenceEnabled) {
+          database.incrementQueueItemRetry(item.id);
+        }
         
         const delay = this.calculateRetryDelay(item.retryCount, isRateLimitError);
         console.log(`🔄 Retry ${item.retryCount}/${this.maxRetries} for ${item.id} in ${delay}ms (${error.message})`);
@@ -231,8 +389,17 @@ class QueueService {
         this.processing.delete(item.id);
         this.stats.totalFailed++;
         
+        // Update database with failure
+        if (this.persistenceEnabled) {
+          database.updateQueueItemStatus(item.id, QUEUE_STATUS.FAILED, error.message);
+        }
+        
         console.log(`❌ Failed after ${this.maxRetries} retries: ${item.id} (${error.message})`);
-        item.reject(error);
+        
+        // For restored items, reject may not be set
+        if (item.reject) {
+          item.reject(error);
+        }
       }
     }
   }
@@ -373,9 +540,21 @@ function getQueueService(options = {}) {
   return instance;
 }
 
+/**
+ * Graceful shutdown - stop queue and persist state
+ */
+function shutdownQueueService() {
+  if (instance) {
+    instance.stop();
+    console.log('📋 Queue service shutdown complete');
+  }
+}
+
 module.exports = {
   QueueService,
   getQueueService,
+  shutdownQueueService,
+  registerTaskType,
   QUEUE_STATUS,
   PRIORITY
 };

@@ -187,6 +187,11 @@ export async function logout() {
   return apiCall('/auth/logout', { method: 'POST' });
 }
 
+// Disconnect X account
+export async function disconnectX() {
+  return apiCall('/api/me/x/disconnect', { method: 'POST' });
+}
+
 // ============================================
 // Prompt Template API
 // ============================================

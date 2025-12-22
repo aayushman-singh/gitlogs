@@ -194,6 +194,25 @@ async function initDatabase() {
 
         CREATE INDEX IF NOT EXISTS idx_prompt_templates_user ON user_prompt_templates(user_id);
         CREATE INDEX IF NOT EXISTS idx_prompt_templates_active ON user_prompt_templates(user_id, is_active);
+
+        -- Persistent queue for surviving server restarts
+        CREATE TABLE IF NOT EXISTS queue_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          queue_id TEXT UNIQUE NOT NULL,
+          task_type TEXT NOT NULL,
+          user_id TEXT DEFAULT 'default',
+          data_json TEXT NOT NULL,
+          priority INTEGER DEFAULT 2,
+          status TEXT DEFAULT 'pending',
+          retry_count INTEGER DEFAULT 0,
+          error_message TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_queue_status ON queue_items(status);
+        CREATE INDEX IF NOT EXISTS idx_queue_priority ON queue_items(priority, created_at);
+        CREATE INDEX IF NOT EXISTS idx_queue_user ON queue_items(user_id);
       `);
       
       // Save initial state
@@ -840,6 +859,160 @@ function deletePromptTemplate(userId, templateId) {
   return success;
 }
 
+// ============================================
+// Queue Persistence Functions
+// ============================================
+
+/**
+ * Save a queue item to the database for persistence
+ * @param {object} item - Queue item to persist
+ */
+function saveQueueItem(item) {
+  if (!ensureDb()) return false;
+  
+  const success = run(
+    `INSERT INTO queue_items (queue_id, task_type, user_id, data_json, priority, status, retry_count, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(queue_id) DO UPDATE SET
+       status = excluded.status,
+       retry_count = excluded.retry_count,
+       error_message = excluded.error_message,
+       updated_at = CURRENT_TIMESTAMP`,
+    [
+      item.id,
+      item.taskType,
+      item.userId || 'default',
+      JSON.stringify(item.data),
+      item.priority || 2,
+      item.status || 'pending',
+      item.retryCount || 0
+    ]
+  );
+  
+  return success;
+}
+
+/**
+ * Update queue item status
+ * @param {string} queueId - Queue item ID
+ * @param {string} status - New status
+ * @param {string} errorMessage - Optional error message
+ */
+function updateQueueItemStatus(queueId, status, errorMessage = null) {
+  if (!ensureDb()) return false;
+  
+  if (errorMessage) {
+    return run(
+      'UPDATE queue_items SET status = ?, error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE queue_id = ?',
+      [status, errorMessage, queueId]
+    );
+  }
+  
+  return run(
+    'UPDATE queue_items SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE queue_id = ?',
+    [status, queueId]
+  );
+}
+
+/**
+ * Increment retry count for a queue item
+ * @param {string} queueId - Queue item ID
+ */
+function incrementQueueItemRetry(queueId) {
+  if (!ensureDb()) return false;
+  
+  return run(
+    'UPDATE queue_items SET retry_count = retry_count + 1, status = ?, updated_at = CURRENT_TIMESTAMP WHERE queue_id = ?',
+    ['retrying', queueId]
+  );
+}
+
+/**
+ * Get all pending/retrying queue items (for restoration on startup)
+ * @returns {Array} - Array of queue items
+ */
+function getPendingQueueItems() {
+  if (!ensureDb()) return [];
+  
+  const rows = getAll(
+    `SELECT * FROM queue_items 
+     WHERE status IN ('pending', 'retrying', 'processing') 
+     ORDER BY priority ASC, created_at ASC`
+  );
+  
+  return rows.map(row => ({
+    id: row.queue_id,
+    taskType: row.task_type,
+    userId: row.user_id,
+    data: JSON.parse(row.data_json),
+    priority: row.priority,
+    status: row.status,
+    retryCount: row.retry_count,
+    createdAt: new Date(row.created_at).getTime(),
+    errorMessage: row.error_message
+  }));
+}
+
+/**
+ * Delete a queue item (after completion or final failure)
+ * @param {string} queueId - Queue item ID
+ */
+function deleteQueueItem(queueId) {
+  if (!ensureDb()) return false;
+  
+  return run('DELETE FROM queue_items WHERE queue_id = ?', [queueId]);
+}
+
+/**
+ * Mark processing items as pending (for restart recovery)
+ * Items that were processing when server stopped should be retried
+ */
+function resetProcessingQueueItems() {
+  if (!ensureDb()) return false;
+  
+  const count = getOne('SELECT COUNT(*) as count FROM queue_items WHERE status = ?', ['processing']);
+  if (count && count.count > 0) {
+    console.log(`🔄 Resetting ${count.count} processing queue items to pending`);
+    return run(
+      'UPDATE queue_items SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE status = ?',
+      ['pending', 'processing']
+    );
+  }
+  return true;
+}
+
+/**
+ * Clean up old completed/failed queue items (older than 24 hours)
+ */
+function cleanupOldQueueItems() {
+  if (!ensureDb()) return false;
+  
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  return run(
+    'DELETE FROM queue_items WHERE status IN (?, ?) AND updated_at < ?',
+    ['completed', 'failed', oneDayAgo]
+  );
+}
+
+/**
+ * Get queue statistics
+ */
+function getQueueItemStats() {
+  if (!ensureDb()) return null;
+  
+  const pending = getOne('SELECT COUNT(*) as count FROM queue_items WHERE status = ?', ['pending']);
+  const processing = getOne('SELECT COUNT(*) as count FROM queue_items WHERE status = ?', ['processing']);
+  const retrying = getOne('SELECT COUNT(*) as count FROM queue_items WHERE status = ?', ['retrying']);
+  const failed = getOne('SELECT COUNT(*) as count FROM queue_items WHERE status = ?', ['failed']);
+  
+  return {
+    pending: pending?.count || 0,
+    processing: processing?.count || 0,
+    retrying: retrying?.count || 0,
+    failed: failed?.count || 0
+  };
+}
+
 function closeDatabase() {
   if (saveInterval) {
     clearInterval(saveInterval);
@@ -912,6 +1085,16 @@ module.exports = {
   getActivePromptTemplate,
   setActivePromptTemplate,
   deletePromptTemplate,
+  
+  // Queue persistence
+  saveQueueItem,
+  updateQueueItemStatus,
+  incrementQueueItemRetry,
+  getPendingQueueItems,
+  deleteQueueItem,
+  resetProcessingQueueItems,
+  cleanupOldQueueItems,
+  getQueueItemStats,
   
   // Database management
   closeDatabase
