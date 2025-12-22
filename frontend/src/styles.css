@@ -107,9 +107,13 @@ a:hover {
 }
 
 .logo-mark-lg {
-  width: 72px;
-  height: 72px;
-  margin: 0 auto 16px;
+  width: 200px;
+  height: 200px;
+  margin: 0 auto 24px;
+  transform: scale(1.5) !important;
+  transform-origin: center !important;
+  display: block;
+  object-fit: contain;
 }
 
 .nav {
@@ -964,6 +968,13 @@ code {
   max-width: 400px;
   margin: 60px auto;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.login-card .logo-mark-lg {
+  align-self: center;
 }
 
 .login-card h1 {
@@ -1339,6 +1350,82 @@ code {
   color: rgba(226, 232, 240, 0.7);
   margin-bottom: 24px;
   font-size: 18px;
+}
+
+.landing-footer-promo {
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 32px 0;
+  background: rgba(12, 16, 22, 0.5);
+}
+
+.landing-footer-promo-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.landing-footer-promo-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.landing-footer-promo-label {
+  font-size: 14px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(226, 232, 240, 0.6);
+  margin: 0;
+}
+
+.landing-footer-social-links {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.landing-footer-social-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: rgba(20, 24, 33, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: rgba(226, 232, 240, 0.6);
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.landing-footer-social-link:hover {
+  background: rgba(30, 38, 50, 0.85);
+  border-color: rgba(94, 234, 212, 0.5);
+  color: #e2e8f0;
+  transform: translateY(-2px);
+}
+
+.landing-footer-promo-text {
+  font-size: 14px;
+  color: rgba(226, 232, 240, 0.6);
+  margin: 0;
+  text-align: center;
+}
+
+.landing-footer-link {
+  color: rgba(88, 166, 255, 0.9);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.landing-footer-link:hover {
+  color: #58a6ff;
+  text-decoration: underline;
 }
 
 .landing-footer-links {

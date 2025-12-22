@@ -1,6 +1,4 @@
 import { Link } from 'react-router-dom';
-import { getBackendUrl } from '../utils/api';
-import logo from '../../gitlogs.png';
 
 const benefits = [
   {
@@ -264,35 +262,6 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="landing-footer">
-        <section className="landing-footer-cta">
-          <div className="landing-shell landing-footer-inner landing-animate" style={{ '--delay': '0.1s' }}>
-            <h2>Ready to automate your presence?</h2>
-            <p>Join developers who code more and post less.</p>
-            <button onClick={handleGetStarted} className="landing-button primary">
-              <span className="landing-button-icon">{icons.branch}</span>
-              Get Started Free
-            </button>
-          </div>
-        </section>
-
-        <section className="landing-footer-links">
-          <div className="landing-shell landing-footer-links-inner">
-            <div className="landing-footer-brand">
-              <img src={logo} alt="GitLogs logo" className="landing-footer-logo" />
-              <span>gitlogs</span>
-            </div>
-            <div className="landing-footer-nav">
-              <a href="#" rel="noreferrer">Privacy</a>
-              <a href="#" rel="noreferrer">Terms</a>
-              <a href="#" rel="noreferrer">Docs</a>
-              <a href="https://github.com" rel="noreferrer" target="_blank">GitHub</a>
-              <a href="https://x.com" rel="noreferrer" target="_blank">X</a>
-            </div>
-            <p>© 2025 gitlogs. For developers, by developers.</p>
-          </div>
-        </section>
-      </footer>
     </main>
   );
 }
