@@ -1464,6 +1464,7 @@ code {
   display: inline-flex;
   flex-wrap: wrap;
   gap: 18px;
+  margin-left: 170px;
 }
 
 .landing-footer-nav a {
@@ -2235,6 +2236,20 @@ code {
 .dashboard-tab-btn.active {
   border-color: var(--accent-blue);
   color: var(--text-primary);
+}
+
+.tab-beta-badge {
+  display: inline-block;
+  background: rgba(210, 153, 34, 0.2);
+  color: var(--accent-yellow);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+  line-height: 1.2;
 }
 
 .dashboard-tab-content {

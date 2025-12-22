@@ -1,6 +1,6 @@
 import { FaLinkedin, FaGithub } from 'react-icons/fa';
 import { FaXTwitter } from 'react-icons/fa6';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 import { getBackendUrl } from '../utils/api';
 import logo from '../../gitlogs.png';
 
@@ -81,17 +81,6 @@ export default function Footer() {
               ))}
             </div>
           </div>
-          <p className="landing-footer-promo-text">
-            © {new Date().getFullYear()} GitLogs. Built by{' '}
-            <a
-              href="https://github.com/aayushman-singh"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="landing-footer-link"
-            >
-              Aayushman Singh
-            </a>
-          </p>
         </div>
       </section>
 
@@ -103,13 +92,23 @@ export default function Footer() {
             <span>gitlogs</span>
           </div>
           <div className="landing-footer-nav">
-            <a href="#" rel="noreferrer">Privacy</a>
-            <a href="#" rel="noreferrer">Terms</a>
+            <Link to="/privacy">Privacy</Link>
+            <Link to="/terms">Terms</Link>
             <a href="#" rel="noreferrer">Docs</a>
-            <a href="https://github.com" rel="noreferrer" target="_blank">GitHub</a>
-            <a href="https://x.com" rel="noreferrer" target="_blank">X</a>
+            <a href="https://github.com/aayushman-singh/gitlogs" rel="noreferrer" target="_blank">GitHub</a>
+            <a href="https://x.com/gitlogs_" rel="noreferrer" target="_blank">X</a>
           </div>
-          <p>© 2025 gitlogs. For developers, by developers.</p>
+          <p>
+            © 2025 GitLogs. Built by{' '}
+            <a
+              href="https://github.com/aayushman-singh"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="landing-footer-link"
+            >
+              Aayushman Singh
+            </a>
+          </p>
         </div>
       </section>
     </footer>

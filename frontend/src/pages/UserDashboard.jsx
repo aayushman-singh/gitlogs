@@ -494,6 +494,9 @@ export default function UserDashboard() {
                 >
                   <span className="tab-icon"><Icon size={16} /></span>
                   {tab.label}
+                  {tab.id === 'customisation' && (
+                    <span className="tab-beta-badge">Beta</span>
+                  )}
                 </button>
               </li>
             );
@@ -512,6 +515,9 @@ export default function UserDashboard() {
                 <>
                   <activeTabData.icon size={16} style={{ marginRight: 8, verticalAlign: 'middle' }} />
                   {activeTabData.label}
+                  {activeTabData.id === 'customisation' && (
+                    <span className="tab-beta-badge" style={{ marginLeft: 6 }}>Beta</span>
+                  )}
                 </>
               )}
             </span>
@@ -529,6 +535,9 @@ export default function UserDashboard() {
                 >
                   <Icon size={18} />
                   {tab.label}
+                  {tab.id === 'customisation' && (
+                    <span className="tab-beta-badge" style={{ marginLeft: 6 }}>Beta</span>
+                  )}
                 </button>
               );
             })}
