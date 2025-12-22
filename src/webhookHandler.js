@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const config = require('../config/config');
 const commitFormatter = require('./commitFormatter');
 const geminiClient = require('./geminiClient');
+const templateEngine = require('./templateEngine');
 const twitterClient = require('./twitterClient');
 const database = require('./database');
 const repoIndexer = require('./repoIndexer');
@@ -133,43 +134,52 @@ async function processCommit(commit, repository, pusher, options = {}) {
 
     const commitData = commitFormatter.formatCommit(commit, repository, pusher);
 
+    // Check if user is using the default template (for formatting decisions)
+    const isDefaultTemplate = templateEngine.isUsingDefaultTemplate(userId);
+    
+    // Generate changelog text (handles both template-only and AI-powered modes)
     let changelogText = commitData.subject;
-    if (geminiClient.isInitialized()) {
-      console.log('🤖 Generating changelog with Gemini AI (with project context)...');
-      
-      const commitContext = {
-        message: commit.message,
-        type: commitData.type,
-        filesChanged: commitData.filesChanged,
-        added: commit.added || [],
-        modified: commit.modified || [],
-        removed: commit.removed || [],
-        sha: commit.id.substring(0, 7)
-      };
-      
-      // Pass repo context and user ID for enhanced prompts and quota tracking
-      changelogText = await geminiClient.generateChangelog(commitContext, repository, {
-        userId,
-        repoContext,
-        priority: geminiClient.PRIORITY.NORMAL
-      });
-      
-      // Filter out any emojis and hashtags that might have been generated (defensive approach)
+    
+    const commitContext = {
+      message: commit.message,
+      type: commitData.type,
+      filesChanged: commitData.filesChanged,
+      added: commit.added || [],
+      modified: commit.modified || [],
+      removed: commit.removed || [],
+      sha: commit.id.substring(0, 7),
+      author: pusher.name,
+      branch: (options.ref || 'refs/heads/main').replace('refs/heads/', '')
+    };
+    
+    // generateChangelog now handles everything:
+    // - Template processing via templateEngine
+    // - AI generation only if template uses {{AI_TEXT}}
+    // - Returns final text ready for tweeting
+    changelogText = await geminiClient.generateChangelog(commitContext, repository, {
+      userId,
+      repoContext,
+      priority: geminiClient.PRIORITY.NORMAL
+    });
+    
+    // Filter out any emojis and hashtags (defensive approach for AI-generated text)
+    if (isDefaultTemplate) {
       changelogText = commitFormatter.removeEmojis(changelogText);
       changelogText = commitFormatter.removeHashtags(changelogText);
-      
-      // Fallback to original subject if filtering resulted in empty or invalid text
-      if (!changelogText || changelogText.trim().length === 0) {
-        console.warn('⚠️  Filtered changelog is empty, using original commit subject');
-        changelogText = commitData.subject;
-      }
+    }
+    
+    // Fallback to original subject if empty
+    if (!changelogText || changelogText.trim().length === 0) {
+      console.warn('⚠️  Changelog is empty, using original commit subject');
+      changelogText = commitData.subject;
     }
 
     const tweetData = commitFormatter.formatTweetText(
       changelogText,
       commitData,
       repository,
-      pusher
+      pusher,
+      { isDefaultTemplate }
     );
 
     // Validate tweet data before posting

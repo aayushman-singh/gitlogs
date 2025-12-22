@@ -4,17 +4,35 @@ import { getMyTemplates, saveTemplate, setActiveTemplate, deleteTemplate, getCur
 
 // Template variables - constants that don't change
 const TEMPLATE_VARIABLES = {
-  '{{PROJECT_CONTEXT}}': 'Project context including tech stack, frameworks, and description',
-  '{{REPOSITORY}}': 'Repository name (e.g., owner/repo-name)',
-  '{{COMMIT_TYPE}}': 'Type of commit (feat, fix, refactor, etc.)',
+  // Special AI variable - MUST be included for AI to work
+  '{{AI_TEXT}}': '🤖 AI-generated text (required if you want AI to generate content)',
+  
+  // Commit information
   '{{COMMIT_MESSAGE}}': 'Original commit message from Git',
+  '{{COMMIT_TYPE}}': 'Type of commit (feat, fix, refactor, etc.)',
+  '{{COMMIT_SHA}}': 'Short commit SHA (7 characters)',
+  
+  // Repository information
+  '{{REPOSITORY}}': 'Repository name (e.g., repo-name)',
+  '{{REPOSITORY_FULL}}': 'Full repository name (e.g., owner/repo-name)',
+  '{{REPOSITORY_URL}}': 'GitHub URL to the repository',
+  
+  // File changes
   '{{FILES_CHANGED}}': 'Number of files changed',
   '{{ADDED_FILES}}': 'List of added files (if any)',
   '{{MODIFIED_FILES}}': 'List of modified files (if any)',
   '{{REMOVED_FILES}}': 'List of removed files (if any)',
+  
+  // Author information
   '{{AUTHOR}}': 'Commit author username',
-  '{{BRANCH}}': 'Branch name where commit was pushed'
+  '{{BRANCH}}': 'Branch name where commit was pushed',
+  
+  // Context
+  '{{PROJECT_CONTEXT}}': 'Project context including tech stack and description'
 };
+
+// The special AI variable
+const AI_TEXT_VARIABLE = '{{AI_TEXT}}';
 
 // Default prompt template - the original one
 const DEFAULT_PROMPT_TEMPLATE = `You are a developer writing a log entry about your work. Write in a concise, technical style with bullet points.
@@ -221,19 +239,29 @@ function TemplateEditorModal({ isOpen, onClose, onSave, template, variables, use
   const [isPreset, setIsPreset] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [warning, setWarning] = useState('');
   const [showVariables, setShowVariables] = useState(false);
   const MAX_TEMPLATE_LENGTH = 280; // Twitter/X character limit
   
+  // Check if template uses AI_TEXT variable
+  const usesAIText = templateText.includes(AI_TEXT_VARIABLE);
+  
   // Use actual user data for preview
   const previewData = {
+    // Special AI variable - shows sample AI-generated text
+    AI_TEXT: 'update:\n- added realtime tweet preview to template editor\n- improved ux for template creation',
+    
     // Template variables
     PROJECT_CONTEXT: 'A developer tool for automating commit logs to social media',
-    REPOSITORY: 'aayushman-singh/gitlogs',
+    REPOSITORY: 'gitlogs',
+    REPOSITORY_FULL: 'aayushman-singh/gitlogs',
+    REPOSITORY_URL: 'https://github.com/aayushman-singh/gitlogs',
     COMMIT_TYPE: 'feat',
     COMMIT_MESSAGE: 'Add realtime tweet preview to template editor',
+    COMMIT_SHA: 'abc1234',
     FILES_CHANGED: '3',
-    ADDED_FILES: '- Added Files: Customisation.jsx',
-    MODIFIED_FILES: '- Modified Files: api.js, server.js',
+    ADDED_FILES: 'Added: Customisation.jsx',
+    MODIFIED_FILES: 'Modified: api.js, server.js',
     REMOVED_FILES: '',
     AUTHOR: xUserInfo?.username || user?.login || 'developer',
     BRANCH: 'main',
@@ -301,13 +329,37 @@ function TemplateEditorModal({ isOpen, onClose, onSave, template, variables, use
     setError('');
   }, [template, isOpen, presets, existingTemplates]);
 
+  // Validate template configuration when inputs change
+  const validateTemplateConfig = () => {
+    const hasTemplate = templateText.trim().length > 0;
+    const hasPrompt = promptText.trim().length > 0;
+    const usesAI = templateText.includes(AI_TEXT_VARIABLE);
+    
+    // Warning: Has prompt but template doesn't use {{AI_TEXT}}
+    if (hasPrompt && hasTemplate && !usesAI) {
+      return 'You have an AI prompt but your template doesn\'t use {{AI_TEXT}}. The AI prompt will be ignored. Add {{AI_TEXT}} to your template or remove the AI prompt.';
+    }
+    
+    // Info: Uses {{AI_TEXT}} but no prompt
+    if (usesAI && !hasPrompt) {
+      return 'Your template uses {{AI_TEXT}} but no AI prompt is defined. Default AI instructions will be used.';
+    }
+    
+    return '';
+  };
+  
+  // Update warning when template or prompt changes
+  useEffect(() => {
+    setWarning(validateTemplateConfig());
+  }, [templateText, promptText]);
+
   const handleSave = async () => {
     if (!name.trim()) {
       setError('Template name is required');
       return;
     }
-    if (!templateText.trim() && !promptText.trim()) {
-      setError('Either template or prompt is required');
+    if (!templateText.trim()) {
+      setError('Template is required');
       return;
     }
     
@@ -408,6 +460,12 @@ function TemplateEditorModal({ isOpen, onClose, onSave, template, variables, use
           {error && (
             <div className="alert alert-error mb-4">{error}</div>
           )}
+          
+          {warning && (
+            <div className="alert alert-warning mb-4" style={{ background: '#fef3c7', border: '1px solid #f59e0b', color: '#92400e' }}>
+              ⚠️ {warning}
+            </div>
+          )}
 
           <div className="form-group">
             <label className="form-label">Template Name</label>
@@ -430,18 +488,19 @@ function TemplateEditorModal({ isOpen, onClose, onSave, template, variables, use
               <div className="form-group">
                 <label className="form-label">Tweet Template</label>
                 <p className="text-small text-muted" style={{ marginBottom: 8 }}>
-                  This is what will be shown in your tweet. Use variables like {'{{COMMIT_MESSAGE}}'} to include dynamic data. The preview on the right shows exactly how it will look.
+                  This is what will be shown in your tweet. Use <code style={{ background: '#333', padding: '2px 4px', borderRadius: 3 }}>{'{'}{'{'} AI_TEXT {'}'}{'}'}</code> to include AI-generated content.
+                  Without it, variables are replaced directly with no AI processing.
                 </p>
                 <textarea
                   className="form-input form-textarea"
                   value={templateText}
                   onChange={(e) => setTemplateText(e.target.value)}
-                  placeholder={`e.g., Just shipped: {{COMMIT_MESSAGE}}\nRepo: {{REPOSITORY}}\n\nOr:\nupdate:\n- {{COMMIT_MESSAGE}}`}
+                  placeholder={`With AI:\n{{AI_TEXT}}\n\n🔗 {{REPOSITORY_URL}}\n\n---\n\nWithout AI:\nJust shipped: {{COMMIT_MESSAGE}}\nRepo: {{REPOSITORY}}`}
                   rows={8}
                 />
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                   <p className="text-small text-muted" style={{ margin: 0 }}>
-                    Variables will be replaced with actual commit data.
+                    {usesAIText ? '🤖 AI will generate text for {{AI_TEXT}}' : '📝 No AI - variables replaced directly'}
                   </p>
                   <span className="text-small text-muted">
                     {renderPreview(templateText).length} / {MAX_TEMPLATE_LENGTH} chars (rendered)
@@ -450,20 +509,27 @@ function TemplateEditorModal({ isOpen, onClose, onSave, template, variables, use
               </div>
               
               <div className="form-group" style={{ marginTop: 24 }}>
-                <label className="form-label">AI Instructions (Prompt)</label>
+                <label className="form-label">AI Instructions (Prompt) {!usesAIText && <span style={{ color: '#888', fontWeight: 'normal' }}>— not used without {'{{AI_TEXT}}'}</span>}</label>
                 <p className="text-small text-muted" style={{ marginBottom: 8 }}>
-                  Instructions for the AI on how to generate the final tweet. Define emoji usage, tone, language, character limits, etc.
+                  {usesAIText 
+                    ? 'Instructions for the AI on how to generate the {{AI_TEXT}} content. Define tone, style, character limits, etc.'
+                    : 'Only used if your template includes {{AI_TEXT}}. Otherwise, this is ignored.'}
                 </p>
                 <textarea
                   className="form-input form-textarea"
                   value={promptText}
                   onChange={(e) => setPromptText(e.target.value)}
-                  placeholder="Define emoji usage, tone, character limits, formatting rules, and other AI instructions."
+                  placeholder={usesAIText 
+                    ? "e.g., Write a concise changelog in lowercase with bullet points. No emojis. Keep under 150 chars."
+                    : "Add {{AI_TEXT}} to your template to enable AI generation"}
                   rows={8}
+                  style={{ opacity: usesAIText ? 1 : 0.6 }}
                 />
-                <p className="text-small text-muted" style={{ marginTop: 8, marginBottom: 0 }}>
-                  These instructions guide the AI in transforming your template into the final tweet.
-                </p>
+                {usesAIText && (
+                  <p className="text-small text-muted" style={{ marginTop: 8, marginBottom: 0 }}>
+                    These instructions guide the AI in generating the {'{{AI_TEXT}}'} content.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -798,14 +864,23 @@ export default function Customisation({ user, xConnected }) {
         </div>
         <div className="how-it-works">
           <p>
-            Templates define how your commit messages are transformed into social posts. 
-            When you push a commit, GitLogs sends your selected template (with commit details filled in) 
-            to an AI which generates the final post text.
+            Templates define how your commits are formatted into tweets. 
+            You have full control over the output format.
           </p>
-          <h4>Available Variables</h4>
+          
+          <h4 style={{ marginTop: 16 }}>🤖 The AI Variable</h4>
+          <p>
+            Use <code style={{ background: '#333', padding: '2px 6px', borderRadius: 3 }}>{'{'}{'{'} AI_TEXT {'}'}{'}'}</code> in your template where you want AI-generated content.
+            The AI prompt you provide tells the AI how to generate that text.
+          </p>
+          <p>
+            <strong>Without {'{{AI_TEXT}}'}:</strong> Your template is used directly with variables replaced. No AI processing.
+          </p>
+          
+          <h4 style={{ marginTop: 16 }}>Available Variables</h4>
           <div className="variables-reference">
             {Object.entries(TEMPLATE_VARIABLES).map(([key, desc]) => (
-              <div key={key} className="variable-item">
+              <div key={key} className="variable-item" style={{ background: key === '{{AI_TEXT}}' ? 'rgba(59, 130, 246, 0.1)' : undefined }}>
                 <code>{key}</code>
                 <span>{desc}</span>
               </div>

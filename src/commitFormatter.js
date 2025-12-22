@@ -165,7 +165,8 @@ function formatCommit(commit, repository, pusher) {
   };
 }
 
-function formatTweetText(changelogText, commitData, repository, pusher) {
+function formatTweetText(changelogText, commitData, repository, pusher, options = {}) {
+  const { isDefaultTemplate = true } = options;
   const MAX_TWITTER_LENGTH = 280;
   
   // Validate changelog text
@@ -177,7 +178,14 @@ function formatTweetText(changelogText, commitData, repository, pusher) {
   const repoUrl = repository.html_url || (repository.full_name ? `https://github.com/${repository.full_name}/` : 'https://github.com/');
   
   // Helper function to build tweet with a given changelog
+  // Only add repo info and "please star" message for default template
   const buildTweet = (changelog) => {
+    // For custom templates, return the changelog as-is (user controls the format)
+    if (!isDefaultTemplate) {
+      return changelog;
+    }
+    
+    // Default template: add repo info and "please star" message
     return [
       changelog,
       '',

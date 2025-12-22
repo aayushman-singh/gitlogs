@@ -8,7 +8,8 @@ const OAuthHandler = require('./oauthHandler');
 const database = require('./database');
 const { getQueueService, shutdownQueueService } = require('./queueService');
 const githubAuth = require('./githubAuth');
-const { TEMPLATE_VARIABLES, TEMPLATE_PRESETS } = require('./geminiClient');
+const templateEngine = require('./templateEngine');
+const { TEMPLATE_VARIABLES, TEMPLATE_PRESETS } = templateEngine;
 
 const app = express();
 
