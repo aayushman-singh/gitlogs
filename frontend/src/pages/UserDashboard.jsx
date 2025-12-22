@@ -389,7 +389,7 @@ export default function UserDashboard() {
                         </div>
                         <div className="quick-actions">
                           <button className="btn btn-primary btn-sm" onClick={() => handleSetOgPost(repo.full_name)}>
-                            Save OG Post
+                            Launch post
                           </button>
                           <button className="btn btn-secondary btn-sm" onClick={() => { setSelectedRepo(null); setOgTweetId(''); }}>
                             Cancel
@@ -403,7 +403,7 @@ export default function UserDashboard() {
                           onClick={() => { setSelectedRepo(repo.full_name); setOgTweetId(repo.og_post_id || ''); }}
                           title="Set an original tweet (OG post) that all future commit tweets will quote. This creates a thread-like experience where your commit updates appear as replies to your original announcement. Optional - you can post commits without setting an OG post."
                         >
-                          {repo.og_post_id ? 'Change OG Post' : 'Set OG Post'} (optional)
+                          Launch post (optional)
                         </button>
                         {repo.og_post_id && (
                           <a

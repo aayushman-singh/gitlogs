@@ -407,11 +407,45 @@ function getOAuthToken(userId = 'default') {
 }
 
 /**
+ * Get X OAuth token for a specific user WITHOUT fallback to 'default'
+ * Use this when checking connection status to avoid false positives
+ * @param {string} userId - User ID to get token for
+ */
+function getOAuthTokenNoFallback(userId) {
+  if (!ensureDb()) {
+    // Check file storage without fallback
+    try {
+      if (!fs.existsSync(TOKEN_FILE_PATH)) {
+        return null;
+      }
+      const data = JSON.parse(fs.readFileSync(TOKEN_FILE_PATH, 'utf8'));
+      return data[userId] || null; // No fallback to data.default
+    } catch (error) {
+      return null;
+    }
+  }
+  
+  // Try user-specific token only, no fallback
+  const row = getOne(
+    'SELECT token FROM oauth_tokens WHERE user_id = ? ORDER BY expires_at DESC LIMIT 1',
+    [userId]
+  );
+  
+  if (row && row.token) {
+    return JSON.parse(row.token);
+  }
+  
+  return null;
+}
+
+/**
  * Check if X OAuth token is valid for a specific user
+ * Does NOT fallback to 'default' token - checks only user-specific token
  * @param {string} userId - User ID to check
  */
 function isOAuthTokenValid(userId = 'default') {
-  const token = getOAuthToken(userId);
+  // Use no-fallback version to check if THIS user specifically has a valid token
+  const token = getOAuthTokenNoFallback(userId);
   if (!token) return false;
   const expiresAt = token.expires_at || 0;
   return Date.now() / 1000 < expiresAt;

@@ -281,7 +281,7 @@ export default function Admin() {
               </div>
             </div>
             <div className="quick-actions">
-              <button className="btn btn-primary" onClick={handleSetOgPost}>Set OG Post</button>
+              <button className="btn btn-primary" onClick={handleSetOgPost}>Launch post</button>
               <button className="btn btn-secondary" onClick={handleGetOgPost}>Get Current OG Post</button>
             </div>
           </div>
