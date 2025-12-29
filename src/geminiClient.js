@@ -13,11 +13,13 @@ const config = require('../config/config');
 const { getQueueService, registerTaskType, PRIORITY } = require('./queueService');
 const database = require('./database');
 const templateEngine = require('./templateEngine');
+const diffAnalyzer = require('./diffAnalyzer');
 
 // Task types for queue persistence
 const TASK_TYPES = {
   CHANGELOG: 'gemini_changelog',
-  DETAILED_CHANGELOG: 'gemini_detailed_changelog'
+  DETAILED_CHANGELOG: 'gemini_detailed_changelog',
+  DIFF_ANALYSIS: 'gemini_diff_analysis'
 };
 
 // Module state
@@ -97,27 +99,78 @@ function buildProjectContext(commitData, repository, repoContext = null) {
 }
 
 // ============================================
+// Two-Stage Diff Analysis
+// ============================================
+
+/**
+ * Stage 1: Analyze git diff to extract meaningful change summary
+ * This prevents AI hallucination by grounding it in actual code changes
+ * 
+ * @param {object} diffData - Diff data from diffAnalyzer.fetchCommitDiff
+ * @param {string} commitMessage - Original commit message
+ * @param {string} repoName - Repository name
+ * @param {string} userId - User ID for quota tracking
+ * @returns {Promise<string|null>} - Summary of changes or null if analysis failed
+ */
+async function analyzeDiff(diffData, commitMessage, repoName, userId = 'default') {
+  if (!model) {
+    console.warn('⚠️  Gemini model not available for diff analysis');
+    return null;
+  }
+  
+  // Build the analysis prompt
+  const prompt = diffAnalyzer.buildDiffAnalysisPrompt(diffData, commitMessage, repoName);
+  
+  if (!prompt) {
+    console.log('📝 No diff content to analyze, using file-based summary');
+    return null;
+  }
+  
+  console.log('🔬 Stage 1: Analyzing diff with AI...');
+  
+  try {
+    const summary = await generateAIText(prompt);
+    
+    // Track API usage (counts toward quota)
+    database.trackApiUsage(userId, 'gemini');
+    
+    console.log('🔬 Diff analysis complete:', summary.substring(0, 100) + (summary.length > 100 ? '...' : ''));
+    
+    return summary;
+  } catch (error) {
+    console.error('❌ Diff analysis failed:', error.message);
+    return null;
+  }
+}
+
+// ============================================
 // Changelog Generation Tasks
 // ============================================
 
 /**
  * Create a changelog generation task
  * Uses templateEngine for template processing, only calls AI when needed
+ * Now supports two-stage generation with diff analysis
  * 
- * @param {object} data - Task data (commitData, repository, userId, repoContext)
+ * @param {object} data - Task data (commitData, repository, userId, repoContext, diffSummary)
  * @returns {Function} - Async task function
  */
 function createChangelogTask(data) {
   return async () => {
-    const { commitData, repository, userId, repoContext } = data;
+    const { commitData, repository, userId, repoContext, diffSummary } = data;
     
     // Build project context for AI prompts
     const projectContext = buildProjectContext(commitData, repository, repoContext);
     
+    // If we have a diff summary from Stage 1, inject it into commit data
+    const enhancedCommitData = diffSummary 
+      ? { ...commitData, diffAnalysis: diffSummary }
+      : commitData;
+    
     // Process template through templateEngine
     const processed = templateEngine.processTemplate(
       userId,
-      commitData,
+      enhancedCommitData,
       repository,
       projectContext
     );
@@ -134,11 +187,24 @@ function createChangelogTask(data) {
       return commitData.message || 'No model available';
     }
     
-    console.log('🤖 Generating AI text with Gemini...');
+    console.log('🤖 Stage 2: Generating changelog with Gemini...');
     
     try {
+      // If we have diff summary, enhance the prompt
+      let finalPrompt = processed.prompt;
+      if (diffSummary) {
+        finalPrompt = `${processed.prompt}
+
+=== DIFF ANALYSIS (from actual code changes) ===
+The following summary was extracted from the actual git diff. Use ONLY this information to describe what changed:
+${diffSummary}
+=== END DIFF ANALYSIS ===
+
+CRITICAL: Base your response ONLY on the diff analysis above. Do not invent or assume any changes not mentioned in the diff analysis.`;
+      }
+      
       // Generate AI text using the prompt
-      const aiText = await generateAIText(processed.prompt);
+      const aiText = await generateAIText(finalPrompt);
       
       // Track API usage
       database.trackApiUsage(userId, 'gemini');
@@ -241,14 +307,20 @@ function initGemini() {
 
 /**
  * Generate changelog with queue support and enhanced context
+ * Now supports two-stage generation with diff analysis
  * 
  * @param {object} commitData - Commit information
  * @param {object} repository - Repository information
- * @param {object} options - Additional options (userId, repoContext, priority)
+ * @param {object} options - Additional options (userId, repoContext, priority, diffSummary)
  * @returns {Promise<string>} - Generated changelog text
  */
 async function generateChangelog(commitData, repository, options = {}) {
-  const { userId = 'default', repoContext = null, priority = PRIORITY.NORMAL } = options;
+  const { 
+    userId = 'default', 
+    repoContext = null, 
+    priority = PRIORITY.NORMAL,
+    diffSummary = null  // Pre-computed diff summary from Stage 1
+  } = options;
 
   // Check user quota before queuing
   if (userId !== 'default' && database.isUserOverQuota(userId, 'gemini')) {
@@ -276,7 +348,8 @@ async function generateChangelog(commitData, repository, options = {}) {
       description: repository.description
     },
     userId,
-    repoContext
+    repoContext,
+    diffSummary  // Include diff summary in task data
   };
 
   // Create the task function
@@ -407,6 +480,9 @@ module.exports = {
   generateDetailedChangelog,
   generateAIText,
   
+  // Two-stage diff analysis
+  analyzeDiff,
+  
   // Context building
   buildProjectContext,
   
@@ -417,6 +493,9 @@ module.exports = {
   
   // Queue priority constants
   PRIORITY,
+  
+  // Re-export diff analyzer for convenience
+  diffAnalyzer,
   
   // Re-export template engine for convenience
   // (other modules can import directly from templateEngine)

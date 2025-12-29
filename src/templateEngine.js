@@ -43,7 +43,10 @@ const TEMPLATE_VARIABLES = {
   '{{BRANCH}}': 'Branch name where commit was pushed',
   
   // Context
-  '{{PROJECT_CONTEXT}}': 'Project context including tech stack and description'
+  '{{PROJECT_CONTEXT}}': 'Project context including tech stack and description',
+  
+  // Diff analysis (from two-stage AI processing)
+  '{{DIFF_ANALYSIS}}': 'AI-analyzed summary of actual code changes from git diff (prevents hallucination)'
 };
 
 // List of all variable names (for validation)
@@ -78,11 +81,11 @@ CRITICAL RULES - MUST FOLLOW:
 5. All sentences must be lowercase
 6. Only punctuation allowed is comma "," and period "."
 7. Abbreviate most things (e.g., "implementation" -> "impl", "configuration" -> "config", "authentication" -> "auth")
-8. Talk about general changes and purpose rather than exact component or variable name changes
-9. Focus on what was done and why, not specific code details
+8. ONLY describe changes that are DIRECTLY evident from the commit message and file names provided above. DO NOT invent, assume, or hallucinate features or changes that are not explicitly mentioned.
+9. If the commit message is vague (like "update", "fix", "changes"), describe ONLY what can be inferred from the file names. Example: if files are "OpenGraph.tsx" and "share/[id].tsx", say "updated opengraph and share page components".
 10. Keep it concise but informative (aim for 2-3 bullet points, maximum 150 characters total)
 11. CRITICAL: The entire output must be 150 characters or less (including "update:" and all bullet points). This is for a tweet, so brevity is essential.
-12. Use the PROJECT CONTEXT above to understand what this project is about and tailor the log entry accordingly.
+12. Use the PROJECT CONTEXT above to understand what this project is about, but DO NOT invent changes not in this specific commit.
 
 Example Output:
 update:
@@ -94,8 +97,9 @@ update:
 - ✨ refactored auth flow
 - 🚀 added new features
 - #coding #github (NO HASHTAGS!)
+- added cli debug flag (WRONG - not mentioned in commit!)
 
-Format: Write only the log entry text, starting with "update:" followed by bullet points. No additional explanations, formatting, hashtags, or emojis. Keep it under 150 characters total. ABSOLUTELY NO EMOJIS OR HASHTAGS.`;
+Format: Write only the log entry text, starting with "update:" followed by bullet points. No additional explanations, formatting, hashtags, or emojis. Keep it under 150 characters total. ABSOLUTELY NO EMOJIS OR HASHTAGS. ONLY describe what is in the commit data above.`;
 
 /**
  * Pre-built template presets
@@ -351,7 +355,10 @@ function buildVariableContext(commitData, repository, projectContext = '') {
     BRANCH: commitData.branch || 'main',
     
     // Context
-    PROJECT_CONTEXT: projectContext
+    PROJECT_CONTEXT: projectContext,
+    
+    // Diff analysis (from two-stage processing, may be empty if analysis not run)
+    DIFF_ANALYSIS: commitData.diffAnalysis || ''
   };
 }
 

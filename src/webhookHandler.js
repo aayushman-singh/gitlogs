@@ -6,6 +6,7 @@ const templateEngine = require('./templateEngine');
 const twitterClient = require('./twitterClient');
 const database = require('./database');
 const repoIndexer = require('./repoIndexer');
+const diffAnalyzer = require('./diffAnalyzer');
 
 /**
  * Verify GitHub webhook signature
@@ -121,13 +122,15 @@ function isMergeCommit(commit) {
 
 /**
  * Process a single commit with enhanced context
+ * Now uses two-stage AI generation for accurate changelogs
+ * 
  * @param {object} commit - Git commit object
  * @param {object} repository - Repository information
  * @param {object} pusher - Pusher information
- * @param {object} options - Additional options (repoContext, userId, xOAuthUserId)
+ * @param {object} options - Additional options (repoContext, userId, xOAuthUserId, githubUserId)
  */
 async function processCommit(commit, repository, pusher, options = {}) {
-  const { repoContext = null, userId = 'default', xOAuthUserId = 'default' } = options;
+  const { repoContext = null, userId = 'default', xOAuthUserId = 'default', githubUserId = null } = options;
   
   try {
     console.log(`📝 Processing commit: ${commit.id.substring(0, 7)} (user: ${userId}, xAuth: ${xOAuthUserId})`);
@@ -152,14 +155,57 @@ async function processCommit(commit, repository, pusher, options = {}) {
       branch: (options.ref || 'refs/heads/main').replace('refs/heads/', '')
     };
     
+    // ============================================
+    // Two-Stage AI Generation
+    // ============================================
+    
+    let diffSummary = null;
+    
+    // Stage 1: Fetch and analyze git diff (if not skipped)
+    if (!diffAnalyzer.shouldSkipDiffAnalysis(commit)) {
+      console.log('🔬 Starting two-stage diff analysis...');
+      
+      // Fetch diff from GitHub API
+      const diffData = await diffAnalyzer.fetchCommitDiff(
+        repository.full_name,
+        commit.id,
+        githubUserId
+      );
+      
+      if (diffData.diff && !diffData.error) {
+        // Analyze diff with AI (Stage 1)
+        diffSummary = await geminiClient.analyzeDiff(
+          diffData,
+          commit.message,
+          repository.name,
+          userId
+        );
+        
+        if (diffSummary) {
+          console.log('✅ Stage 1 complete: Diff analyzed successfully');
+        }
+      } else if (diffData.error) {
+        console.log(`⚠️  Diff fetch failed: ${diffData.error}, using file-based summary`);
+        // Use file-based fallback summary
+        diffSummary = diffAnalyzer.buildFileBasedSummary(commit);
+      }
+    } else {
+      // Use file-based summary for skipped diffs
+      diffSummary = diffAnalyzer.buildFileBasedSummary(commit);
+      console.log(`📦 Using file-based summary: ${diffSummary}`);
+    }
+    
+    // Stage 2: Generate changelog with diff context
     // generateChangelog now handles everything:
     // - Template processing via templateEngine
     // - AI generation only if template uses {{AI_TEXT}}
+    // - Uses diffSummary to prevent hallucination
     // - Returns final text ready for tweeting
     changelogText = await geminiClient.generateChangelog(commitContext, repository, {
       userId,
       repoContext,
-      priority: geminiClient.PRIORITY.NORMAL
+      priority: geminiClient.PRIORITY.NORMAL,
+      diffSummary  // Pass Stage 1 analysis to Stage 2
     });
     
     // Filter out any emojis and hashtags (defensive approach for AI-generated text)
@@ -308,8 +354,9 @@ async function handleWebhook(req, res) {
     // Get the X OAuth user ID for posting tweets
     // Extract GitHub user ID from userId (e.g., 'github:123456' -> '123456')
     let xOAuthUserId = 'default';
+    let githubUserId = null;
     if (user && user.user_id && user.user_id.startsWith('github:')) {
-      const githubUserId = user.user_id.replace('github:', '');
+      githubUserId = user.user_id.replace('github:', '');
       xOAuthUserId = database.getXOAuthUserId(githubUserId);
     }
     
@@ -326,13 +373,15 @@ async function handleWebhook(req, res) {
     
     console.log(`📝 Processing ${nonMergeCommits.length} non-merge commits (skipped ${commits.length - nonMergeCommits.length} merge commits)`);
 
-    // Process commits with enhanced context
+    // Process commits with enhanced context (including two-stage diff analysis)
     const results = [];
     for (const commit of nonMergeCommits) {
       const result = await processCommit(commit, repository, pusher, {
         repoContext,
         userId,
-        xOAuthUserId
+        xOAuthUserId,
+        githubUserId,  // For GitHub API authentication when fetching diffs
+        ref
       });
       results.push(result);
     }
