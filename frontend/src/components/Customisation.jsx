@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { HiTemplate, HiPencil, HiTrash, HiCheck, HiX, HiInformationCircle, HiCode } from 'react-icons/hi';
-import { getMyTemplates, saveTemplate, setActiveTemplate, deleteTemplate, getCurrentUser } from '../utils/api';
+import { HiTemplate, HiPencil, HiTrash, HiCheck, HiX, HiInformationCircle, HiCode, HiSparkles, HiSave } from 'react-icons/hi';
+import { getMyTemplates, saveTemplate, setActiveTemplate, deleteTemplate, getCurrentUser, getPostSettings, savePostSettings } from '../utils/api';
 
 // Template variables - constants that don't change
 const TEMPLATE_VARIABLES = {
@@ -687,6 +687,7 @@ export default function Customisation({ user, xConnected }) {
   useEffect(() => {
     loadTemplates();
     loadXUserInfo();
+    loadPostSettings();
   }, [xConnected]);
 
   const loadXUserInfo = async () => {
@@ -699,6 +700,36 @@ export default function Customisation({ user, xConnected }) {
       } catch (err) {
         console.error('Failed to load X user info:', err);
       }
+    }
+  };
+
+  const loadPostSettings = async () => {
+    try {
+      const settings = await getPostSettings();
+      if (settings) {
+        setPostSettings({
+          includeEmoji: settings.includeEmoji !== false,
+          includeHashtags: settings.includeHashtags !== false,
+          includeLink: settings.includeLink !== false,
+          aiEnhance: settings.aiEnhance || false,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load post settings:', err);
+      // Use defaults if API fails
+    }
+  };
+
+  const handleSavePostSettings = async () => {
+    setSavingSettings(true);
+    try {
+      await savePostSettings(postSettings);
+      setResult({ type: 'success', message: 'Post settings saved successfully!' });
+      setTimeout(() => setResult({ type: '', message: '' }), 3000);
+    } catch (err) {
+      setResult({ type: 'error', message: err.message || 'Failed to save post settings' });
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -852,6 +883,133 @@ export default function Customisation({ user, xConnected }) {
             </p>
           </div>
         )}
+      </div>
+
+      {/* Post Settings */}
+      <div className="card mb-4">
+        <div className="card-header">
+          <h2 className="card-title">
+            <HiSparkles size={18} style={{ marginRight: 8 }} />
+            Post Settings
+          </h2>
+          <p className="text-muted">Configure additional options for your posts</p>
+        </div>
+        <div className="card-body">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              padding: 16,
+              borderRadius: 8,
+              border: '1px solid #374151',
+              background: 'rgba(55, 65, 81, 0.3)'
+            }}>
+              <div>
+                <label className="form-label" style={{ margin: 0 }}>Include Emojis</label>
+                <p className="text-small text-muted" style={{ margin: '4px 0 0 0' }}>
+                  Add relevant emojis to your posts
+                </p>
+              </div>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={postSettings.includeEmoji}
+                  onChange={(e) => setPostSettings({...postSettings, includeEmoji: e.target.checked})}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              padding: 16,
+              borderRadius: 8,
+              border: '1px solid #374151',
+              background: 'rgba(55, 65, 81, 0.3)'
+            }}>
+              <div>
+                <label className="form-label" style={{ margin: 0 }}>Include Hashtags</label>
+                <p className="text-small text-muted" style={{ margin: '4px 0 0 0' }}>
+                  Auto-generate relevant hashtags
+                </p>
+              </div>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={postSettings.includeHashtags}
+                  onChange={(e) => setPostSettings({...postSettings, includeHashtags: e.target.checked})}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              padding: 16,
+              borderRadius: 8,
+              border: '1px solid #374151',
+              background: 'rgba(55, 65, 81, 0.3)'
+            }}>
+              <div>
+                <label className="form-label" style={{ margin: 0 }}>Include Repository Link</label>
+                <p className="text-small text-muted" style={{ margin: '4px 0 0 0' }}>
+                  Add a link to your repository
+                </p>
+              </div>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={postSettings.includeLink}
+                  onChange={(e) => setPostSettings({...postSettings, includeLink: e.target.checked})}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              padding: 16,
+              borderRadius: 8,
+              border: '1px solid #374151',
+              background: 'rgba(55, 65, 81, 0.3)'
+            }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <label className="form-label" style={{ margin: 0 }}>AI Enhancement</label>
+                  <HiSparkles size={14} style={{ color: '#fbbf24' }} />
+                </div>
+                <p className="text-small text-muted" style={{ margin: '4px 0 0 0' }}>
+                  Use AI to make your posts more engaging
+                </p>
+              </div>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={postSettings.aiEnhance}
+                  onChange={(e) => setPostSettings({...postSettings, aiEnhance: e.target.checked})}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          
+          <button 
+            className="btn btn-primary" 
+            onClick={handleSavePostSettings} 
+            disabled={savingSettings}
+            style={{ width: '100%', marginTop: 16 }}
+          >
+            <HiSave size={16} style={{ marginRight: 8 }} />
+            {savingSettings ? 'Saving...' : 'Save Post Settings'}
+          </button>
+        </div>
       </div>
 
       {/* How It Works */}

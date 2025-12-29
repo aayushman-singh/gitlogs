@@ -622,12 +622,17 @@ app.post('/api/me/templates/active', (req, res) => {
   const { templateId } = req.body;
   const userId = `github:${githubUserId}`;
   
-  // If it's a preset, save it as a custom template first
+  // If it's a preset, save it as a custom template first (if not already saved)
   if (templateId && TEMPLATE_PRESETS[templateId]) {
     const preset = TEMPLATE_PRESETS[templateId];
-    database.savePromptTemplate(userId, templateId, preset.name, preset.template);
+    // Save the preset template (will create or update if exists)
+    const saved = database.savePromptTemplate(userId, templateId, preset.name, preset.template);
+    if (!saved) {
+      console.warn(`⚠️  Failed to save preset template ${templateId} for user ${userId}`);
+    }
   }
   
+  // Set the template as active (will activate existing template or handle 'default')
   const success = database.setActivePromptTemplate(userId, templateId);
   
   if (!success) {

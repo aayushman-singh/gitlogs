@@ -898,6 +898,17 @@ function setActivePromptTemplate(userId, templateId) {
     return true;
   }
   
+  // Check if template exists before trying to activate
+  const existing = getOne(
+    'SELECT id FROM user_prompt_templates WHERE user_id = ? AND template_id = ?',
+    [userId, templateId]
+  );
+  
+  if (!existing) {
+    console.warn(`⚠️  Template ${templateId} not found for user ${userId}, cannot activate`);
+    return false;
+  }
+  
   // Activate the specified template
   const success = run(
     'UPDATE user_prompt_templates SET is_active = 1 WHERE user_id = ? AND template_id = ?',

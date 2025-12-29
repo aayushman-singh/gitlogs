@@ -223,3 +223,37 @@ export async function deleteTemplate(templateId) {
     method: 'DELETE'
   });
 }
+
+// ============================================
+// Schedule Settings API
+// ============================================
+
+// Get user's schedule settings
+export async function getScheduleSettings() {
+  return apiCall('/api/me/schedule');
+}
+
+// Save schedule settings
+export async function saveScheduleSettings(settings) {
+  return apiCall('/api/me/schedule', {
+    method: 'POST',
+    body: JSON.stringify(settings)
+  });
+}
+
+// ============================================
+// Post Settings API
+// ============================================
+
+// Get user's post settings
+export async function getPostSettings() {
+  return apiCall('/api/me/post-settings');
+}
+
+// Save post settings
+export async function savePostSettings(settings) {
+  return apiCall('/api/me/post-settings', {
+    method: 'POST',
+    body: JSON.stringify(settings)
+  });
+}
