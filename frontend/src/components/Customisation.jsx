@@ -272,7 +272,6 @@ function TemplateEditorModal({ isOpen, onClose, onSave, template, variables, use
     AUTHOR_USERNAME: xUserInfo?.username || user?.login || 'developer',
     AUTHOR_AVATAR: xUserInfo?.profileImageUrl || user?.avatar_url || null,
     COMMIT_URL: 'https://github.com/aayushman-singh/gitlogs/commit/abc1234',
-    COMMIT_SHA: 'abc1234',
     ADDITIONS: '+128',
     DELETIONS: '-12',
     DATE: 'Mar 28, 2024',

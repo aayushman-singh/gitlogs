@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { HiClock, HiCalendar, HiBell, HiZap, HiCoffee, HiSun, HiMoon, HiInformationCircle, HiSave } from 'react-icons/hi';
+import { HiClock, HiCalendar, HiBell, HiStar, HiSun, HiMoon, HiInformationCircle, HiSave } from 'react-icons/hi';
 import { getScheduleSettings, saveScheduleSettings, getBackendUrl } from '../utils/api';
 
 const weekDays = [
@@ -204,7 +204,7 @@ export default function ScheduleTab() {
                 alignItems: 'center', 
                 justifyContent: 'center' 
               }}>
-                <HiZap size={20} style={{ color: '#fbbf24' }} />
+                <HiStar size={20} style={{ color: '#fbbf24' }} />
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -247,7 +247,7 @@ export default function ScheduleTab() {
                 alignItems: 'center', 
                 justifyContent: 'center' 
               }}>
-                <HiCoffee size={20} style={{ color: '#3b82f6' }} />
+                <HiStar size={20} style={{ color: '#3b82f6' }} />
               </div>
               <div style={{ flex: 1 }}>
                 <span style={{ fontWeight: 500 }}>Daily Digest</span>
