@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useAuth, getGitHubAuthUrl } from '../utils/useAuth';
 
 const benefits = [
   {
@@ -145,9 +146,11 @@ const icons = {
 };
 
 export default function Home() {
+  const authState = useAuth();
+
   const handleGetStarted = () => {
     // Redirect to backend OAuth endpoint
-    window.location.href = `${getBackendUrl()}/auth/github`;
+    window.location.href = getGitHubAuthUrl();
   };
 
   return (
@@ -170,15 +173,17 @@ export default function Home() {
             gitlogs takes your GitHub commits and posts on X on your behalf. Spend your time coding, not yapping.
           </p>
 
-          <div className="landing-actions landing-animate" style={{ '--delay': '0.3s' }}>
-            <button onClick={handleGetStarted} className="landing-button primary">
-              <span className="landing-button-icon">{icons.branch}</span>
-              Get started
-            </button>
-            <Link to="/dashboard" className="landing-button secondary">
-              Dashboard
-            </Link>
-          </div>
+          {authState === 'unauthenticated' && (
+            <div className="landing-actions landing-animate" style={{ '--delay': '0.3s' }}>
+              <button onClick={handleGetStarted} className="landing-button primary">
+                <span className="landing-button-icon">{icons.branch}</span>
+                Get started
+              </button>
+              <Link to="/dashboard" className="landing-button secondary">
+                Dashboard
+              </Link>
+            </div>
+          )}
 
           <p className="landing-note landing-animate" style={{ '--delay': '0.4s' }}>
             No credit card required • 2 minute setup

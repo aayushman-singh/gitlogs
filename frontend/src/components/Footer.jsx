@@ -1,7 +1,7 @@
 import { FaLinkedin, FaGithub } from 'react-icons/fa';
 import { FaXTwitter } from 'react-icons/fa6';
 import { useLocation, Link } from 'react-router-dom';
-import { getBackendUrl } from '../utils/api';
+import { useAuth, getGitHubAuthUrl } from '../utils/useAuth';
 import logo from '../../gitlogs.png';
 
 const icons = {
@@ -22,6 +22,7 @@ const icons = {
 export default function Footer() {
   const location = useLocation();
   const isHomePage = location.pathname === '/';
+  const authState = useAuth();
   
   const socialLinks = [
     {
@@ -42,13 +43,13 @@ export default function Footer() {
   ];
 
   const handleGetStarted = () => {
-    window.location.href = `${getBackendUrl()}/auth/github`;
+    window.location.href = getGitHubAuthUrl();
   };
 
   return (
     <footer className="landing-footer">
-      {/* CTA Section - only show on home page */}
-      {isHomePage && (
+      {/* CTA Section - only show on home page and when not authenticated */}
+      {isHomePage && authState === 'unauthenticated' && (
         <section className="landing-footer-cta">
           <div className="landing-shell landing-footer-inner landing-animate" style={{ '--delay': '0.1s' }}>
             <h2>Ready to automate your presence?</h2>
