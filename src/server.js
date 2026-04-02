@@ -988,6 +988,58 @@ app.get('/api/debug/repo/:owner/:repo', requireApiKey, (req, res) => {
   });
 });
 
+// ============================================
+// GitHub API Proxy (for Jarvis content strategist)
+// Proxies GitHub API requests using the stored OAuth token
+// ============================================
+
+app.get('/api/github/proxy/*', requireApiKey, async (req, res) => {
+  // Extract the GitHub API path from the URL
+  const githubPath = req.params[0]; // everything after /api/github/proxy/
+  if (!githubPath) {
+    return res.status(400).json({ error: 'GitHub API path required' });
+  }
+
+  // Find the first user with a valid token (single-user use case)
+  const allTokens = database.getAllGithubTokens?.();
+  let accessToken = null;
+
+  if (allTokens && allTokens.length > 0) {
+    // Try to get a valid (auto-refreshed) token for the first user
+    accessToken = await githubAuth.getValidAccessToken(allTokens[0].github_user_id);
+  }
+
+  if (!accessToken) {
+    return res.status(401).json({
+      error: 'no_github_token',
+      message: 'No valid GitHub token found. Please sign in to GitLogs first.'
+    });
+  }
+
+  try {
+    const githubUrl = `https://api.github.com/${githubPath}`;
+    const queryString = new URLSearchParams(req.query);
+    // Remove api_key from forwarded query params
+    queryString.delete('api_key');
+    const fullUrl = queryString.toString() ? `${githubUrl}?${queryString}` : githubUrl;
+
+    const response = await fetch(fullUrl, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'gitlogs-proxy'
+      }
+    });
+
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    console.error('GitHub proxy error:', err.message);
+    res.status(502).json({ error: 'GitHub API request failed', detail: err.message });
+  }
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   const queueService = getQueueService();

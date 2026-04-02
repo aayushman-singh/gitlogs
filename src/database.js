@@ -763,6 +763,15 @@ function getGithubToken(githubUserId) {
   };
 }
 
+function getAllGithubTokens() {
+  if (!ensureDb()) {
+    return [];
+  }
+
+  const rows = getAll('SELECT github_user_id FROM github_tokens');
+  return rows || [];
+}
+
 function isGithubTokenExpired(githubUserId) {
   const tokenData = getGithubToken(githubUserId);
   if (!tokenData) return true;
@@ -1151,6 +1160,7 @@ module.exports = {
   // GitHub token storage
   storeGithubToken,
   getGithubToken,
+  getAllGithubTokens,
   isGithubTokenValid,
   deleteGithubToken,
   getValidGithubTokenData,
