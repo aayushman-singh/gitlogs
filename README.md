@@ -38,7 +38,7 @@ Devs ship constantly but rarely tell anyone. Manual tweeting kills momentum; aba
 ```bash
 git clone https://github.com/aayushman-singh/git-twitter-bot.git gitlogs
 cd gitlogs
-npm install
+npm run setup
 cp .env.example .env   # fill in keys
 npm start
 ```
