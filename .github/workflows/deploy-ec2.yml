@@ -18,8 +18,14 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           port: ${{ secrets.EC2_PORT || 22 }}
           script: |
-            set -e
+            set -euo pipefail
             cd ~/gitlogs
             git pull
             pnpm i
+            pnpm run frontend:install
+            pnpm run build
+            if [ ! -f frontend/dist/index.html ]; then
+              echo "frontend build did not produce frontend/dist/index.html"
+              exit 1
+            fi
             sudo systemctl restart gitlogs

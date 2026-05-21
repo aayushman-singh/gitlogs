@@ -61,6 +61,10 @@ npm run dev      # Hot reload
 npm run build    # Build frontend
 ```
 
+## Deployment
+
+The EC2 workflow runs `pnpm i`, `pnpm run frontend:install`, and `pnpm run build` before restarting `gitlogs`.
+
 ## Author
 
 Built by [Aayushman Singh](https://aayushman.dev) — engineer building autonomous coding agents. Smart India Hackathon '24 winner.
