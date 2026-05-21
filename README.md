@@ -35,13 +35,32 @@ Devs ship constantly but rarely tell anyone. Manual tweeting kills momentum; aba
 
 ## Quick start
 
+Prerequisites: Node.js 18+, npm, a GitHub OAuth app, an X OAuth 2.0 app, and a Gemini API key.
+
 ```bash
 git clone https://github.com/aayushman-singh/git-twitter-bot.git gitlogs
 cd gitlogs
-npm install
-cp .env.example .env   # fill in keys
+npm run setup
+cp .env.example .env
+# Fill in the required .env values listed below.
+npm run build
 npm start
 ```
+
+The backend serves the built Vite app from `frontend/dist`, so `npm run setup` installs both root and frontend dependencies, and `npm run build` must run before `npm start`.
+If you change `PORT`, update `FRONTEND_URL`, `API_BASE_URL`, and `OAUTH_CALLBACK_URL` to the same host and port.
+
+Required `.env` values for the full local flow:
+
+| Variable | Purpose |
+| --- | --- |
+| `FRONTEND_URL` | Browser redirect target after OAuth, usually `http://localhost:3000` for the built local app |
+| `API_BASE_URL` | Public backend URL used for OAuth callbacks and GitHub webhooks; use `http://localhost:3000` for localhost-only OAuth testing |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth login and repository access |
+| `OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET` | X OAuth 2.0 app credentials for connecting user X accounts |
+| `OAUTH_CALLBACK_URL` | X OAuth callback, usually `${API_BASE_URL}/auth/x/callback` |
+| `WEBHOOK_SECRET` | Shared secret for GitHub webhook signature verification |
+| `GEMINI_API_KEY` | Gemini key used to generate changelog/tweet text |
 
 ## API
 
@@ -57,8 +76,10 @@ npm start
 ## Development
 
 ```bash
-npm run dev      # Hot reload
-npm run build    # Build frontend
+npm run setup    # Install backend and frontend dependencies
+npm run dev:all  # Run Express and Vite together
+npm run build    # Build frontend/dist for npm start
+npm start        # Serve the built frontend and API
 ```
 
 ## Author
