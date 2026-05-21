@@ -10,7 +10,6 @@ Thumbs.db
 .idea/
 .worktrees/
 pnpm-lock.yaml
-package-lock.json
 yarn.lock
 
 /frontend/dist
