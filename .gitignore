@@ -8,6 +8,7 @@ logs/
 Thumbs.db
 .vscode/
 .idea/
+.worktrees/
 pnpm-lock.yaml
 package-lock.json
 yarn.lock
