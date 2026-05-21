@@ -20,6 +20,8 @@ jobs:
           script: |
             set -e
             cd ~/gitlogs
-            git pull
-            pnpm i
+            git pull --ff-only
+            npm ci
+            npm --prefix frontend ci
+            npm run build
             sudo systemctl restart gitlogs
