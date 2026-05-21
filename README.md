@@ -5,6 +5,16 @@ Auto-post your Git commits to X/Twitter with AI-generated changelogs. OAuth in, 
 [![Live](https://img.shields.io/badge/Live-gitlogs.aayushman.dev-1f6feb?style=flat)](https://gitlogs.aayushman.dev)
 [![License](https://img.shields.io/badge/License-MIT-c8693d?style=flat)](LICENSE)
 
+## Run
+
+```bash
+pnpm install && pnpm --dir frontend run build && pnpm start
+```
+
+Open `http://localhost:3000/`, `http://localhost:3000/dashboard`, and `http://localhost:3000/api/health`.
+
+![GitLogs dashboard](frontend/public/dashboard.png)
+
 ---
 
 ## Why

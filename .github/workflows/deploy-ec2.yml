@@ -18,8 +18,12 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           port: ${{ secrets.EC2_PORT || 22 }}
           script: |
-            set -e
+            set -eu
             cd ~/gitlogs
-            git pull
-            pnpm i
+            git pull --ff-only origin main
+            pnpm install
+            pnpm --dir frontend run build
             sudo systemctl restart gitlogs
+            curl --fail --show-error --silent https://api-gitlogs.aayushman.dev/api/health
+            curl --fail --show-error --silent https://gitlogs.aayushman.dev/ >/dev/null
+            curl --fail --show-error --silent https://gitlogs.aayushman.dev/dashboard >/dev/null
