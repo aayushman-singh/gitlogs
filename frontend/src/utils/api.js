@@ -1,9 +1,19 @@
 // API utility functions
 
 // Get backend URL from build-time env (VITE_API_BASE).
-// Default to the local backend when the env var is unset — never a dead remote.
+// In dev, default to the local backend. In a PRODUCTION build, refuse to guess:
+// a prod bundle silently pointing at localhost would ship a broken app, so fail
+// loudly instead of falling back (per the project's no-silent-fallback rule).
 export function getBackendUrl() {
-  return import.meta.env.VITE_API_BASE || 'http://localhost:3000';
+  const base = import.meta.env.VITE_API_BASE;
+  if (base) return base;
+  if (import.meta.env.PROD) {
+    throw new Error(
+      'VITE_API_BASE is not set. Set it at build time for production builds ' +
+        '(e.g. VITE_API_BASE=https://api.example.com pnpm build).'
+    );
+  }
+  return 'http://localhost:3000';
 }
 
 const API_BASE = getBackendUrl();

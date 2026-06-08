@@ -10,16 +10,14 @@ Format: `[YYYY-MM-DD] PHASE.step — decision — rationale`.
   the only env file ever committed is `.env.example`. `.env` and `frontend/.env` are
   correctly git-ignored and were never in history. **No git history rewrite needed.**
 - **[Security] Real leak found in `.env.example`.** The committed `.env.example`
-  contained partially-redacted but recognizable **real** X OAuth `OAUTH_CLIENT_ID` /
-  `OAUTH_CLIENT_SECRET` (prefix+suffix of the live values). Decision: scrub to true
-  placeholders immediately. This is the actual credential-leak surface, not `.env`.
-- **[Security] Live secrets on disk in `.env` require rotation — BLOCKED ON USER.**
-  `.env` (gitignored, on disk only) holds live: Gemini API key, full Twitter/X API
-  key+secret+bearer+access tokens, Cloudflare API token, X OAuth client secret,
-  GitHub OAuth client secret, admin API key. These are NOT leaked via git, but exist
-  in plaintext on the dev machine and were shared in this repo context. Recommend the
-  user rotate all of them. Listed in SESSION_SUMMARY "Blocked on user". I will never
-  copy these into any committed file.
+  contained recognizable **real** OAuth client credential material. Decision: scrub
+  to true placeholders immediately. This was the actual credential-leak surface, not
+  `.env`. (Specifics intentionally not enumerated in this committed file.)
+- **[Security] Local `.env` secrets require rotation — BLOCKED ON USER.** The local
+  (git-ignored, never-committed) `.env` holds live credentials that should be rotated
+  as a precaution. Details are intentionally NOT enumerated here; see the private
+  rotation checklist surfaced to the user. No real secret is ever copied into any
+  committed file.
 - **[A2] Commit `pnpm-lock.yaml`.** HANDOFF + global rule favor reproducible installs.
   Un-ignoring root + frontend lockfiles. Removing `package-lock.json`/`yarn.lock`
   ignore lines is out of scope; pnpm is the chosen package manager (lockfiles present).
@@ -36,3 +34,23 @@ Format: `[YYYY-MM-DD] PHASE.step — decision — rationale`.
   fictional repos, 30 generated tweets. No real PII.
 - **[Demo] Demo will be keyless + fixture-replayed** per HANDOFF rule 2. The keyed
   prod path stops at one-command-deployable with templated secrets in RUNBOOK.md.
+
+### A7 — Phase A codex review applied (codex/2026-06-08-phaseA.md)
+- **P0 seed destructiveness** → added `assertSafeToSeed()` (refuses NODE_ENV=production)
+  + loud DESTRUCTIVE log before wiping the DB.
+- **P1 prod API base fallback** → `getBackendUrl()` now THROWS in production builds when
+  `VITE_API_BASE` is unset (dev still defaults to localhost). No silent localhost in prod.
+- **P1 seed not representative** → extended `tweets` schema (tweet_text/status/author)
+  with an additive PRAGMA-driven migration; added strict `saveTweetRecord` that persists
+  the full record and FAILS LOUDLY on duplicate commit_sha (no INSERT OR IGNORE). Seed
+  now writes rich records and verifies persisted count == fixture count.
+- **P1 committed secret inventory** → scrubbed DECISIONS.md so it no longer enumerates
+  which live secrets exist or that they were exposed.
+- **P2 incomplete admin removal** → deleted the orphaned `public/js/admin-react.js`
+  bundle (only referenced the already-deleted /admin.html).
+- **P2 stale STATE.md** → STATE.md now tracks real progress.
+- **P2 ALLOWED_REPOS placeholder** → defaulted to empty in `.env.example` so a fresh
+  setup doesn't silently reject real webhooks.
+- **Deferred (not codex-P0..P3 for this diff):** database.js's broad catch→sentinel
+  pattern + file-based OAuth fallback (pre-existing, working code; would be an unrelated
+  refactor). Startup placeholder-secret rejection (P2) → candidate for Phase B.

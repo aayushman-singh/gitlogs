@@ -136,6 +136,9 @@ async function initDatabase() {
           repo_name TEXT NOT NULL,
           commit_sha TEXT NOT NULL,
           tweet_id TEXT NOT NULL,
+          tweet_text TEXT,
+          status TEXT DEFAULT 'posted',
+          author TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           UNIQUE(commit_sha)
         );
@@ -215,9 +218,28 @@ async function initDatabase() {
         CREATE INDEX IF NOT EXISTS idx_queue_user ON queue_items(user_id);
       `);
       
+      // Additive migration: tweets tables created before the content columns
+      // existed are upgraded in place. Driven by PRAGMA table_info (a real
+      // schema check, not an error-swallowing ALTER) so it's idempotent.
+      const existingTweetCols = new Set();
+      const colStmt = db.prepare('PRAGMA table_info(tweets)');
+      while (colStmt.step()) existingTweetCols.add(colStmt.getAsObject().name);
+      colStmt.free();
+      const tweetColMigrations = {
+        tweet_text: 'TEXT',
+        status: "TEXT DEFAULT 'posted'",
+        author: 'TEXT',
+      };
+      for (const [col, decl] of Object.entries(tweetColMigrations)) {
+        if (!existingTweetCols.has(col)) {
+          db.run(`ALTER TABLE tweets ADD COLUMN ${col} ${decl}`);
+          console.log(`🔧 Migrated tweets table: added column ${col}`);
+        }
+      }
+
       // Save initial state
       saveDatabase();
-      
+
       // Start auto-save interval
       saveInterval = setInterval(saveDatabase, 30000);
       
@@ -320,6 +342,61 @@ async function getTweetsForRepo(repoName) {
     'SELECT * FROM tweets WHERE repo_name = ? ORDER BY created_at DESC',
     [repoName]
   );
+}
+
+/**
+ * Persist a FULL tweet record (user, content, status, author, timestamp).
+ *
+ * Unlike saveTweetId (the thin webhook write path that only records
+ * repo/sha/tweet_id and lets user_id/created_at default), this stores the
+ * generated tweet text and metadata so the ledger is representative — used by
+ * the seed/fixtures and the demo. It FAILS LOUDLY: a duplicate commit_sha or a
+ * not-ready DB throws rather than silently no-op'ing (no INSERT OR IGNORE).
+ */
+async function saveTweetRecord(record) {
+  if (!ensureDb()) {
+    throw new Error('saveTweetRecord: database is not ready');
+  }
+  const {
+    userId = 'default',
+    repoName,
+    commitSha,
+    tweetId,
+    tweetText = null,
+    status = 'posted',
+    author = null,
+    createdAt = null,
+  } = record || {};
+  if (!repoName || !commitSha || !tweetId) {
+    throw new Error(
+      `saveTweetRecord: missing required field (repoName/commitSha/tweetId) in ${JSON.stringify(record)}`
+    );
+  }
+  try {
+    if (createdAt) {
+      db.run(
+        `INSERT INTO tweets (user_id, repo_name, commit_sha, tweet_id, tweet_text, status, author, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [userId, repoName, commitSha, tweetId, tweetText, status, author, createdAt]
+      );
+    } else {
+      db.run(
+        `INSERT INTO tweets (user_id, repo_name, commit_sha, tweet_id, tweet_text, status, author)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [userId, repoName, commitSha, tweetId, tweetText, status, author]
+      );
+    }
+  } catch (error) {
+    throw new Error(`saveTweetRecord: insert failed for commit ${commitSha}: ${error.message}`);
+  }
+  const changes = db.getRowsModified();
+  if (changes !== 1) {
+    throw new Error(
+      `saveTweetRecord: expected exactly 1 row inserted for commit ${commitSha}, got ${changes} (duplicate commit_sha?)`
+    );
+  }
+  saveDatabase();
+  return true;
 }
 
 // ============================================
@@ -1119,6 +1196,7 @@ module.exports = {
   // Tweet functions
   getLastTweetId,
   saveTweetId,
+  saveTweetRecord,
   getTweetsForRepo,
   
   // OG post functions

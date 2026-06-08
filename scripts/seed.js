@@ -43,11 +43,24 @@ function loadFixtures() {
   return data;
 }
 
+function assertSafeToSeed() {
+  // This script is DESTRUCTIVE: it deletes the database at DB_ABS_PATH. Guard
+  // hard against running it where it could destroy real data.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'Refusing to seed: NODE_ENV=production. Seeding wipes the database — never run it against production data.'
+    );
+  }
+  if (process.env.GITLOGS_ALLOW_SEED === 'never') {
+    throw new Error('Refusing to seed: GITLOGS_ALLOW_SEED=never is set.');
+  }
+}
+
 function wipeExistingDatabase() {
   // src/database.js auto-initializes on require and reads DB_FILE_PATH at that
   // moment. Delete the file BEFORE requiring the module so it starts fresh.
   if (fs.existsSync(DB_ABS_PATH)) {
-    console.log(`Deleting existing database for a fresh, idempotent seed: ${DB_ABS_PATH}`);
+    console.log(`⚠️  DESTRUCTIVE: deleting existing database for a fresh, idempotent seed: ${DB_ABS_PATH}`);
     fs.unlinkSync(DB_ABS_PATH);
   } else {
     console.log(`No existing database at ${DB_ABS_PATH} (nothing to delete).`);
@@ -55,6 +68,8 @@ function wipeExistingDatabase() {
 }
 
 async function seed() {
+  assertSafeToSeed();
+
   const fixtures = loadFixtures();
 
   wipeExistingDatabase();
@@ -103,20 +118,35 @@ async function seed() {
   console.log(`Inserted ${repoCount} repos.`);
 
   // -- Tweets --------------------------------------------------------------
-  // saveTweetId is the real write path for the tweets ledger. The tweets table
-  // only stores (repo_name, commit_sha, tweet_id) here; user_id defaults to
-  // 'default' and created_at defaults to CURRENT_TIMESTAMP. The rich
-  // text/status/author/createdAt fields in the fixtures are intentionally NOT
-  // persisted because the schema has no columns for them (see report).
+  // saveTweetRecord persists the FULL record (user, text, status, author,
+  // timestamp) so the seeded ledger is representative and deterministic. It
+  // throws loudly on a duplicate commit_sha, so the count below is trustworthy.
   let tweetCount = 0;
   for (const tweet of fixtures.tweets) {
-    const ok = await db.saveTweetId(tweet.repoName, tweet.commitSha, tweet.tweetId);
-    if (!ok) {
-      throw new Error(`saveTweetId failed. Offending row: ${JSON.stringify(tweet)}`);
-    }
+    await db.saveTweetRecord({
+      userId: tweet.userId,
+      repoName: tweet.repoName,
+      commitSha: tweet.commitSha,
+      tweetId: tweet.tweetId,
+      tweetText: tweet.text,
+      status: tweet.status,
+      author: tweet.author,
+      createdAt: tweet.createdAt,
+    });
     tweetCount++;
   }
   console.log(`Inserted ${tweetCount} tweets.`);
+
+  // Verify what actually landed in the DB matches what we intended to write —
+  // a deterministic seed must not silently lose rows.
+  const persistedTweets = (
+    await Promise.all(fixtures.repos.map((r) => db.getTweetsForRepo(r.repoFullName)))
+  ).flat();
+  if (persistedTweets.length !== fixtures.tweets.length) {
+    throw new Error(
+      `Seed verification failed: wrote ${fixtures.tweets.length} tweets but DB holds ${persistedTweets.length}.`
+    );
+  }
 
   // Final flush + clean shutdown (closeDatabase performs a final saveDatabase()).
   db.closeDatabase();
