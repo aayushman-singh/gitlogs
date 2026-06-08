@@ -12,21 +12,30 @@ jobs:
     steps:
       - name: SSH and deploy
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          # Public API origin the SPA is built against. Set this as a repo
+          # Actions *variable* (Settings → Variables), NOT hardcoded — there is
+          # no safe default (the old gitlogs host is dead).
+          VITE_API_BASE: ${{ vars.VITE_API_BASE }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           port: ${{ secrets.EC2_PORT || 22 }}
+          envs: VITE_API_BASE
           script: |
             set -euo pipefail
             cd ~/gitlogs
+            if [ -z "${VITE_API_BASE:-}" ]; then
+              echo "❌ VITE_API_BASE is not set (define it as a repo Actions variable)." >&2
+              exit 1
+            fi
             git pull --ff-only
             # Reproducible installs from the committed lockfiles.
             pnpm install --frozen-lockfile
             pnpm --dir frontend install --frozen-lockfile
             # Build the SPA BEFORE restarting — the backend serves frontend/dist
             # (src/server.js). Without this the served frontend is stale/missing.
-            VITE_API_BASE="${VITE_API_BASE:-https://api-gitlogs.aayushman.dev}" \
-              pnpm --dir frontend run build
+            pnpm --dir frontend run build
             sudo systemctl restart gitlogs
             sudo systemctl --no-pager status gitlogs | head -n 5

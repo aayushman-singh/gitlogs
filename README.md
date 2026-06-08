@@ -14,7 +14,7 @@ Developers ship constantly but rarely tell anyone. Manual tweeting kills momentu
 
 ## See it in 30 seconds
 
-There's a **keyless `/demo` route** — no GitHub, no X, no API keys. It replays bundled commit fixtures through the real pipeline shape entirely client-side: a commit + diff become an interpolated Gemini prompt, which becomes a generated changelog post. A persona toggle (Professional / Hype / Deadpan Technical) re-renders the prompt and output so you can see the prompt engineering, not just the result.
+There's a **keyless `/demo` route** — no GitHub, no X, no API keys, no backend calls. It walks bundled commit fixtures through the real pipeline *shape* entirely client-side: a commit + diff, the **real interpolated Gemini prompt** that the backend would send, and a **pre-generated sample changelog post** (a fixture — the demo does not call Gemini). A persona toggle (Professional / Hype / Deadpan Technical) re-renders the prompt's persona instruction and swaps the matching sample output, so you can see the prompt engineering, not just the result.
 
 Run it locally:
 
@@ -27,7 +27,7 @@ A hosted demo link is pending deployment — see the **Demo** badge above once i
 
 ### Example output
 
-A real generated post from the demo fixtures, for commit `a1b2c3d` on `octo-dev/payments-api` (`feat: idempotency keys on POST /charges`), in the **Professional** persona:
+A sample changelog post (bundled fixture) for commit `a1b2c3d` on `octo-dev/payments-api` (`feat: idempotency keys on POST /charges`), in the **Professional** persona:
 
 > shipped: idempotency keys on POST /charges. retries now return the original charge instead of creating a duplicate. one required header, zero double-charges. (a1b2c3d)
 
@@ -138,6 +138,10 @@ Copy `.env.example` to `.env` and fill in real values — every value in the exa
 | `GET` | `/api/health` | Health check (queue + feature flags) |
 | `GET` | `/api/stats` | Queue + system stats (admin, API-key gated) |
 
+A representative subset — the server also exposes template CRUD
+(`POST/DELETE /api/me/templates...`), `/api/me/x/disconnect`, and
+`/api/me/repos/og-post`. See `src/server.js` for the full route list.
+
 ## Testing
 
 ```bash
@@ -145,7 +149,7 @@ pnpm test        # one-shot Vitest run
 pnpm test:watch  # watch mode
 ```
 
-The backend suite (`tests/`) covers a **webhook end-to-end test** (`webhook.e2e.test.js`) — driving a signed push payload through the wired Express app via supertest — and the **queue mechanics** (`queue.test.js`): rate limiting, retry/backoff, and restart persistence.
+The backend suite (`tests/`) covers a **webhook end-to-end test** (`webhook.e2e.test.js`) — driving a signed push payload through the wired Express app via supertest, including the multi-user per-repo-secret path, signature rejection, and idempotent redelivery — and the **queue mechanics** (`queue.test.js`): retry with exponential backoff and give-up-after-max-retries.
 
 ## Architecture
 

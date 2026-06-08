@@ -62,5 +62,7 @@ jobs:
 
       - name: Build SPA
         env:
-          VITE_API_BASE: https://api-gitlogs.aayushman.dev
+          # Build-validation only; value is irrelevant here (the SPA isn't served
+          # from CI). Real deploys set VITE_API_BASE to the actual API origin.
+          VITE_API_BASE: https://api.example.invalid
         run: pnpm --dir frontend run build

@@ -64,7 +64,7 @@ sequenceDiagram
     alt signature invalid
         WH-->>GH: 401 Invalid signature
     else no secret configured
-        Note over WH: fails OPEN — verification skipped (known weakness)
+        Note over WH: fails CLOSED — request rejected (cannot authenticate sender)
         WH->>WH: continue
     else signature valid
         WH->>WH: continue
@@ -254,7 +254,7 @@ erDiagram
 
 ## Failure modes & known weaknesses
 
-- **HMAC fails OPEN when no secret is configured.** `verifyGitHubSignature` returns `true` (and only logs a warning) if neither a per-repo secret nor `WEBHOOK_SECRET` is set (`webhookHandler.js:32-35`). With no secret, anyone who can reach `/webhook/github` can forge a push payload and trigger tweets. **Always set `WEBHOOK_SECRET`** (and note that webhook *creation* via `createWebhook` already refuses to proceed without one — `server.js:438`). With a secret set, signatures are compared with `crypto.timingSafeEqual`.
+- **HMAC fails CLOSED when no secret is configured.** `verifyGitHubSignature` returns `false` and logs an error if neither a per-repo secret nor `WEBHOOK_SECRET` is set (`webhookHandler.js:32-41`) — a misconfigured server rejects every webhook rather than trusting unsigned payloads. **You must set `WEBHOOK_SECRET`** for the pipeline to accept pushes. With a secret set, signatures are compared with `crypto.timingSafeEqual`.
 - **Live network calls in the hot path.** Each commit makes three external calls — GitHub diff fetch, Gemini Stage 1, Gemini Stage 2 (and then X). Any of them can be slow, rate-limited, or down. The webhook is processed **synchronously before responding to GitHub**, so a slow upstream delays the HTTP response; very large pushes amplify this linearly.
 - **Queue retry behavior.** Gemini work runs through `queueService`: capped at `QUEUE_MAX_RPM` requests/minute, retried up to `QUEUE_MAX_RETRIES` times with jittered exponential backoff (`QUEUE_BASE_RETRY_DELAY × 2^n`, capped at `QUEUE_MAX_RETRY_DELAY`; rate-limit errors get a ≥30s floor). Items are persisted in `queue_items` and restored on startup (`processing` items are reset to `pending`). After max retries an item is marked `failed` and dropped. Note Stage-1 `analyzeDiff` is **not** queued — it calls Gemini directly — so it isn't rate-limit-protected the way Stage 2 is.
 - **GitHub diff fetch degradation.** On 404/403/error, `fetchCommitDiff` returns `{ error }` and the pipeline falls back to a file-name heuristic summary (`buildFileBasedSummary`) — tweets still go out, but grounded only in filenames, which can read as vague.

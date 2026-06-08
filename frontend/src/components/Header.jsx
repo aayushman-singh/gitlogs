@@ -12,6 +12,12 @@ export default function Header() {
   const userMenuRef = useRef(null);
   
   useEffect(() => {
+    // The /demo route is intentionally keyless/offline — never hit the backend
+    // there, so a static demo deploy makes zero API calls.
+    if (location.pathname === '/demo') {
+      setUser(null);
+      return;
+    }
     // Check if user is authenticated via backend
     getCurrentUser()
       .then(data => setUser(data?.user || null))

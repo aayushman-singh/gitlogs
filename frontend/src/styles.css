@@ -2484,6 +2484,7 @@ code {
 .demo-personas {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 5px;
   background: var(--bg-secondary);
@@ -2703,5 +2704,9 @@ code {
 
 @media (max-width: 920px) {
   .demo-pipeline { grid-template-columns: 1fr; }
-  .demo-toolbar { flex-direction: column; }
+  .demo-toolbar { flex-direction: column; align-items: stretch; }
+}
+@media (max-width: 560px) {
+  .demo-personas { width: 100%; }
+  .demo-persona-btn { flex: 1 1 auto; text-align: center; }
 }

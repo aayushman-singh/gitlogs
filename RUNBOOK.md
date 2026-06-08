@@ -139,8 +139,9 @@ Required repo **Actions secrets** (Settings → Secrets and variables → Action
 | `EC2_SSH_KEY` | private key authorized on the host |
 | `EC2_PORT` | ssh port (optional, defaults to 22) |
 
-Also set `VITE_API_BASE` in the deploy environment (or edit the workflow's
-default) so the SPA is built against the right API origin.
+Also set **`VITE_API_BASE`** as a repo **Actions variable** (Settings → Secrets
+and variables → Actions → Variables) — the SPA is built against it. There is no
+default (the old host is dead); the deploy **fails loudly** if it's unset.
 
 > **Known tradeoff (codex review):** the workflow currently builds on the prod
 > host. For a hardened setup, build the SPA artifact in CI and ship only

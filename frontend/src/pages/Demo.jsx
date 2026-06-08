@@ -96,24 +96,25 @@ export default function Demo() {
   return (
     <div className="demo">
       <section className="demo-intro">
-        <span className="demo-eyebrow">Live demo · no login · no backend</span>
+        <span className="demo-eyebrow">Interactive demo · no login · no backend</span>
         <h1>See the gitlogs AI pipeline, end to end.</h1>
         <p>
-          This is a live, no-login demo replaying real fixtures through the gitlogs AI pipeline.
-          Pick a commit, watch its git diff become an interpolated Gemini prompt, and read the
-          changelog post it generates. Switch persona to regenerate the same diff in a different
-          voice. Everything below runs entirely in your browser.
+          A no-login walkthrough of the gitlogs pipeline on bundled commit fixtures. Pick a commit,
+          see its git diff become the real interpolated Gemini prompt the backend would send, and
+          read the matching sample changelog post. Switch persona to see how the prompt instruction
+          and output change. The posts are pre-generated fixtures — this demo calls no API and runs
+          entirely in your browser.
         </p>
         <Link to="/" className="demo-back">&larr; Back to home</Link>
       </section>
 
       <div className="demo-toolbar">
-        <div className="demo-selector" role="tablist" aria-label="Example commits">
+        <div className="demo-selector" role="group" aria-label="Example commits">
           {DEMO_EXAMPLES.map((e) => (
             <button
               key={e.id}
-              role="tab"
-              aria-selected={e.id === exampleId}
+              type="button"
+              aria-pressed={e.id === exampleId}
               className={`demo-tab${e.id === exampleId ? ' is-active' : ''}`}
               onClick={() => setExampleId(e.id)}
             >
@@ -123,13 +124,13 @@ export default function Demo() {
           ))}
         </div>
 
-        <div className="demo-personas" role="radiogroup" aria-label="Persona">
+        <div className="demo-personas" role="group" aria-label="Persona">
           <span className="demo-personas-label">Persona</span>
           {PERSONA_KEYS.map((key) => (
             <button
               key={key}
-              role="radio"
-              aria-checked={key === personaKey}
+              type="button"
+              aria-pressed={key === personaKey}
               className={`demo-persona-btn${key === personaKey ? ' is-active' : ''}`}
               onClick={() => setPersonaKey(key)}
             >

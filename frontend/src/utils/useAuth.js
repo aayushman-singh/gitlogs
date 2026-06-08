@@ -1,16 +1,24 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { getCurrentUser, getBackendUrl } from './api';
 
 /**
  * Custom hook to check user authentication status
  * Checks the /api/me endpoint to determine if user is logged in
- * 
+ *
  * @returns {string} - 'loading' | 'authenticated' | 'unauthenticated'
  */
 export function useAuth() {
   const [authState, setAuthState] = useState('loading');
+  const location = useLocation();
 
   useEffect(() => {
+    // The /demo route is keyless/offline — never call the backend there.
+    if (location.pathname === '/demo') {
+      setAuthState('unauthenticated');
+      return;
+    }
+
     const checkAuth = async () => {
       try {
         await getCurrentUser();
@@ -22,7 +30,7 @@ export function useAuth() {
     };
 
     checkAuth();
-  }, []);
+  }, [location.pathname]);
 
   return authState;
 }
