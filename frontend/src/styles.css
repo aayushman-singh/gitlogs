@@ -2702,6 +2702,143 @@ code {
 }
 .demo-char-count.is-over { color: var(--accent-red); }
 
+/* Stage 00 — commit triage (the commit-intelligence layer) */
+.demo-triage {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 28px;
+}
+.demo-triage-card {
+  flex: none;
+}
+.demo-triage-head {
+  margin-bottom: 16px;
+}
+.demo-triage-refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+.demo-triage-summary {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+.demo-triage-summary strong {
+  color: var(--accent-green);
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+.demo-triage-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.demo-triage-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.demo-triage-item.is-worthy {
+  border-left: 3px solid var(--accent-green);
+}
+.demo-triage-item.is-skipped {
+  opacity: 0.62;
+  border-left: 3px solid var(--border-color);
+}
+.demo-triage-score {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 16px;
+  font-weight: 700;
+}
+.demo-triage-score.is-worthy {
+  color: var(--accent-green);
+  background: rgba(63, 185, 80, 0.12);
+  border: 1px solid rgba(63, 185, 80, 0.3);
+}
+.demo-triage-score.is-skipped {
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+}
+.demo-triage-body {
+  min-width: 0;
+  flex: 1;
+}
+.demo-triage-msg-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.demo-triage-sha {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--accent-purple);
+}
+.demo-triage-msg {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 0;
+}
+.demo-triage-pill {
+  margin-left: auto;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.demo-triage-pill.is-worthy {
+  color: var(--accent-green);
+  background: rgba(63, 185, 80, 0.12);
+  border: 1px solid rgba(63, 185, 80, 0.3);
+}
+.demo-triage-pill.is-skipped {
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+}
+.demo-triage-rationale {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+/* Bridge copy between triage stage and the per-commit pipeline */
+.demo-pipeline-intro {
+  margin: 4px 0 18px;
+}
+.demo-pipeline-intro h2 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+.demo-pipeline-intro p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+  max-width: 64ch;
+}
+.demo-pipeline-intro em { color: var(--accent-yellow); font-style: normal; }
+
 @media (max-width: 920px) {
   .demo-pipeline { grid-template-columns: 1fr; }
   .demo-toolbar { flex-direction: column; align-items: stretch; }
@@ -2709,4 +2846,6 @@ code {
 @media (max-width: 560px) {
   .demo-personas { width: 100%; }
   .demo-persona-btn { flex: 1 1 auto; text-align: center; }
+  .demo-triage-pill { margin-left: 0; }
+  .demo-triage-score { width: 38px; height: 38px; font-size: 14px; }
 }

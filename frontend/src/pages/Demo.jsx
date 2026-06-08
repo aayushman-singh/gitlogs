@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { DEMO_EXAMPLES, PERSONA_KEYS } from '../demo/demoData';
+import { DEMO_EXAMPLES, PERSONA_KEYS, TRIAGE_PUSH } from '../demo/demoData';
+import { triagePush } from '../demo/commitTriage';
 
 // Deterministic, dependency-free avatar: colored tile + initials derived from
 // the handle. Keeps the demo fully offline (no dicebear / external fetch).
@@ -82,6 +83,69 @@ function TweetCard({ example, thread }) {
   );
 }
 
+// Stage 00 — Commit triage. Runs the REAL deterministic scorer (ported in
+// commitTriage.js, mirroring src/commitIntelligence.js) live on the bundled
+// push fixture. No network — every score and rationale is computed in-browser.
+function TriageStage() {
+  const { repoFullName, author, branch, commits } = TRIAGE_PUSH;
+  const { scored, worthy } = useMemo(
+    () => triagePush(commits, { minScore: 40 }),
+    [commits],
+  );
+
+  return (
+    <section className="demo-triage" aria-labelledby="stage-triage">
+      <header className="demo-stage-head">
+        <span className="demo-stage-num">00</span>
+        <h2 id="stage-triage">Commit triage</h2>
+      </header>
+      <div className="demo-card demo-triage-card">
+        <div className="demo-triage-head">
+          <div className="demo-commit-repo">{repoFullName}</div>
+          <div className="demo-triage-refs">
+            <span className="demo-chip">{branch}</span>
+            <span className="demo-chip">@{author}</span>
+            <span className="demo-chip">{commits.length} commits pushed</span>
+          </div>
+          <p className="demo-triage-summary">
+            <strong>{worthy.length}</strong> of <strong>{commits.length}</strong>{' '}
+            commits worth tweeting — the rest are noise.
+          </p>
+        </div>
+        <ul className="demo-triage-list">
+          {scored.map((c) => (
+            <li
+              key={c.sha}
+              className={`demo-triage-item${c.worthy ? ' is-worthy' : ' is-skipped'}`}
+            >
+              <span
+                className={`demo-triage-score${c.worthy ? ' is-worthy' : ' is-skipped'}`}
+                aria-label={`score ${c.score} of 100`}
+              >
+                {c.score}
+              </span>
+              <div className="demo-triage-body">
+                <div className="demo-triage-msg-row">
+                  <code className="demo-triage-sha">{c.sha}</code>
+                  <span className="demo-triage-msg">
+                    {commits.find((x) => x.id.startsWith(c.sha))?.message}
+                  </span>
+                  <span
+                    className={`demo-triage-pill${c.worthy ? ' is-worthy' : ' is-skipped'}`}
+                  >
+                    {c.worthy ? 'WORTHY' : 'SKIPPED'}
+                  </span>
+                </div>
+                <div className="demo-triage-rationale">{c.rationale}</div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
 export default function Demo() {
   const [exampleId, setExampleId] = useState(DEMO_EXAMPLES[0].id);
   const [personaKey, setPersonaKey] = useState(PERSONA_KEYS[0]);
@@ -107,6 +171,16 @@ export default function Demo() {
         </p>
         <Link to="/" className="demo-back">&larr; Back to home</Link>
       </section>
+
+      <TriageStage />
+
+      <div className="demo-pipeline-intro">
+        <h2>From the worthy commits to a post</h2>
+        <p>
+          The triage above decides <em>what</em> ships. The pipeline below shows <em>how</em> a
+          single worthy commit becomes a changelog post — diff to prompt to output.
+        </p>
+      </div>
 
       <div className="demo-toolbar">
         <div className="demo-selector" role="group" aria-label="Example commits">

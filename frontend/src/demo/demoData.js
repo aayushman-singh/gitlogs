@@ -298,3 +298,77 @@ export const DEMO_EXAMPLES = rawExamples.map((example) => {
 });
 
 export const PERSONA_KEYS = PERSONA_ORDER;
+
+/**
+ * A realistic single PUSH to octo-dev/payments-api, deliberately mixing
+ * tweet-worthy work with noise (lockfile bump, merge, wip, version tag, typo
+ * fix). The triage stage scores these live with commitTriage.js so viewers can
+ * watch the commit-intelligence layer decide what's worth posting.
+ *
+ * Shape matches the GitHub webhook commit objects the backend triages:
+ *   { id, message, added:[], modified:[], removed:[] }
+ * Fictional, deterministic, non-PII.
+ */
+export const TRIAGE_PUSH = {
+  repoFullName: 'octo-dev/payments-api',
+  author: 'octo-dev',
+  branch: 'main',
+  commits: [
+    {
+      id: 'a1b2c3d1f0e9',
+      message: 'feat(payments): add idempotency keys to POST /charges',
+      added: ['migrations/0007_idempotency.sql'],
+      modified: ['src/routes/charges.js'],
+      removed: [],
+    },
+    {
+      id: '9f8e7d6c5b4a',
+      message: 'fix(auth): reject expired tokens before the DB lookup',
+      added: [],
+      modified: ['src/auth/middleware.js'],
+      removed: [],
+    },
+    {
+      id: 'c0ffee1234ab',
+      message: 'chore: bump dependencies',
+      added: [],
+      modified: ['pnpm-lock.yaml'],
+      removed: [],
+    },
+    {
+      id: 'deadbeef9876',
+      message: "Merge branch 'main' into feature/charges",
+      added: [],
+      modified: ['src/routes/charges.js'],
+      removed: [],
+    },
+    {
+      id: 'ba5eba11c0de',
+      message: 'wip',
+      added: [],
+      modified: ['src/routes/refunds.js'],
+      removed: [],
+    },
+    {
+      id: '1234abcd5678',
+      message: 'v1.4.2',
+      added: [],
+      modified: ['package.json'],
+      removed: [],
+    },
+    {
+      id: '77ba9988ccdd',
+      message: 'fix typo in README',
+      added: [],
+      modified: ['README.md'],
+      removed: [],
+    },
+    {
+      id: '88cd1199eeff',
+      message: 'perf(ledger): batch charge inserts to cut write latency',
+      added: [],
+      modified: ['src/db/ledger.js'],
+      removed: [],
+    },
+  ],
+};
