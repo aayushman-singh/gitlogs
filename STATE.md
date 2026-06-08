@@ -2,9 +2,9 @@
 
 Read this first on resume. Updated as phases complete.
 
-- **Current phase:** B — Harden
-- **Last completed step:** A7 — Phase A codex review applied (codex/2026-06-08-phaseA.md)
-- **Next step:** B1 — Vitest + supertest backend E2E
+- **Current phase:** DONE — all of A, B, C complete. SESSION_SUMMARY.md written.
+- **Last completed step:** C5 — Phase C codex review applied (codex/2026-06-08-phaseC.md)
+- **Next step:** (none — session complete). Blocked-on-user items are in SESSION_SUMMARY.md.
 
 ## Environment facts (verified 2026-06-08)
 - pnpm 11.1.3, node v25.2.1, codex-cli 0.135.0 all present.
@@ -35,6 +35,6 @@ Read this first on resume. Updated as phases complete.
 ## Phase checklist
 - [x] A1 security scrub  - [x] A2 lockfile  - [x] A3 LICENSE  - [x] A4 api.js
 - [x] A5 feature-flags + admin.html  - [x] A6 seed db  - [x] A7 codex review
-- [ ] B1 vitest E2E  - [ ] B2 CI  - [ ] B3 deploy wf  - [ ] B4 ARCHITECTURE  - [ ] B5 codex
-- [ ] C1 /demo  - [ ] C2 README  - [ ] C3 deploy demo  - [ ] C4 RUNBOOK  - [ ] C5 codex
-- [ ] SESSION_SUMMARY.md
+- [x] B1 vitest E2E  - [x] B2 CI  - [x] B3 deploy wf  - [x] B4 ARCHITECTURE  - [x] B5 codex
+- [x] C1 /demo  - [x] C2 README  - [x] C3 deploy demo  - [x] C4 RUNBOOK  - [x] C5 codex
+- [x] SESSION_SUMMARY.md
