@@ -2380,4 +2380,328 @@ code {
   .modal-body {
     padding: 16px;
   }
+
+/* ============================================
+   Live Demo (/demo) — keyless pipeline showcase
+   ============================================ */
+.demo {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 48px 24px 96px;
+}
+
+.demo-intro {
+  max-width: 760px;
+  margin-bottom: 36px;
+}
+
+.demo-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-green);
+  background: rgba(63, 185, 80, 0.1);
+  border: 1px solid rgba(63, 185, 80, 0.25);
+  padding: 5px 12px;
+  border-radius: 999px;
+}
+
+.demo-intro h1 {
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1.1;
+  margin: 18px 0 14px;
+  letter-spacing: -0.02em;
+}
+
+.demo-intro p {
+  color: var(--text-secondary);
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.demo-back {
+  display: inline-block;
+  margin-top: 16px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.demo-back:hover { color: var(--accent-blue); }
+
+/* Toolbar: example tabs + persona toggle */
+.demo-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 28px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.demo-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.demo-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+.demo-tab:hover { border-color: var(--text-muted); transform: translateY(-1px); }
+.demo-tab.is-active {
+  border-color: var(--accent-blue);
+  background: rgba(88, 166, 255, 0.08);
+  box-shadow: 0 0 0 1px var(--accent-blue) inset;
+}
+.demo-tab-repo {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.demo-tab-sha {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--accent-purple);
+}
+
+.demo-personas {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+.demo-personas-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 0 8px;
+}
+.demo-persona-btn {
+  padding: 7px 14px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.demo-persona-btn:hover { color: var(--text-primary); }
+.demo-persona-btn.is-active {
+  background: var(--accent-blue);
+  color: #0d1117;
+  font-weight: 600;
+}
+
+/* Three-column pipeline */
+.demo-pipeline {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  position: relative;
+}
+
+.demo-stage {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.demo-stage-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.demo-stage-num {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-blue);
+  background: rgba(88, 166, 255, 0.1);
+  border: 1px solid rgba(88, 166, 255, 0.25);
+  border-radius: 6px;
+  padding: 3px 7px;
+}
+.demo-stage-head h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.demo-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+  flex: 1;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* Stage 1 — commit + diff */
+.demo-commit-repo {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.demo-commit-msg {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  margin: 6px 0 12px;
+  color: var(--text-primary);
+}
+.demo-commit-refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.demo-chip {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+.demo-chip-sha { color: var(--accent-purple); }
+
+.demo-diff {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px;
+  overflow-x: auto;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.demo-diff code { display: block; }
+.demo-diff-line {
+  display: block;
+  white-space: pre;
+  padding: 0 6px;
+  border-left: 2px solid transparent;
+}
+.demo-diff-line.is-add {
+  color: var(--accent-green);
+  background: rgba(63, 185, 80, 0.1);
+  border-left-color: var(--accent-green);
+}
+.demo-diff-line.is-del {
+  color: var(--accent-red);
+  background: rgba(248, 81, 73, 0.1);
+  border-left-color: var(--accent-red);
+}
+.demo-diff-line.is-hunk { color: var(--accent-blue); }
+.demo-diff-line.is-meta { color: var(--text-muted); }
+
+/* Stage 2 — prompt card */
+.demo-prompt-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+.demo-prompt-label strong { color: var(--accent-yellow); }
+.demo-prompt-body {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 14px;
+  overflow-x: auto;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Stage 3 — generated tweet thread */
+.demo-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.demo-tweet {
+  display: flex;
+  gap: 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 14px;
+}
+.demo-tweet-avatar {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  color: #fff;
+}
+.demo-tweet-body { min-width: 0; flex: 1; }
+.demo-tweet-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.demo-tweet-name { font-weight: 600; font-size: 14px; }
+.demo-tweet-handle { color: var(--text-muted); font-size: 13px; }
+.demo-tweet-index {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: ui-monospace, monospace;
+}
+.demo-tweet-text {
+  margin: 6px 0 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+.demo-tweet-meta {
+  display: flex;
+  justify-content: flex-end;
+}
+.demo-char-count {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.demo-char-count.is-over { color: var(--accent-red); }
+
+@media (max-width: 920px) {
+  .demo-pipeline { grid-template-columns: 1fr; }
+  .demo-toolbar { flex-direction: column; }
+}
 }

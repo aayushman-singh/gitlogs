@@ -69,8 +69,9 @@ export default function Header() {
           <img src={logoIcon} alt="GitLogs icon" className="logo-mark logo-mark-compact" />
         </Link>
         <nav className="nav">
+          <Link to="/demo" className={isActive('/demo')}>Live Demo</Link>
           <Link to="/dashboard" className={isActive('/dashboard')}>Dashboard</Link>
-          
+
           {user ? (
             <div className="user-dropdown" ref={userMenuRef}>
               <button

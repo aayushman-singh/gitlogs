@@ -179,8 +179,15 @@ export default function Home() {
                 <span className="landing-button-icon">{icons.branch}</span>
                 Get started
               </button>
-              <Link to="/dashboard" className="landing-button secondary">
-                Dashboard
+              <Link to="/demo" className="landing-button secondary">
+                Live demo
+              </Link>
+            </div>
+          )}
+          {authState !== 'unauthenticated' && (
+            <div className="landing-actions landing-animate" style={{ '--delay': '0.3s' }}>
+              <Link to="/demo" className="landing-button secondary">
+                See the live demo
               </Link>
             </div>
           )}
