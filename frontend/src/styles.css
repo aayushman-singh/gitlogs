@@ -2380,6 +2380,7 @@ code {
   .modal-body {
     padding: 16px;
   }
+}
 
 /* ============================================
    Live Demo (/demo) — keyless pipeline showcase
@@ -2703,5 +2704,4 @@ code {
 @media (max-width: 920px) {
   .demo-pipeline { grid-template-columns: 1fr; }
   .demo-toolbar { flex-direction: column; }
-}
 }
