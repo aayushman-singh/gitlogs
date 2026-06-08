@@ -219,8 +219,8 @@ describe('POST /webhook/github — multi-user product path', () => {
     const res = await postWebhook({ body: raw, signature: sign(raw, MU_SECRET) });
 
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ processed: 0, total: 0 });
-    expect(res.body.triage).toMatchObject({ totalCommits: 1, worthy: 0, skipped: 1 });
+    expect(res.body).toMatchObject({ processed: 0, total: 1 }); // 1 non-merge commit considered
+    expect(res.body.triage).toMatchObject({ totalCommits: 1, considered: 1, worthy: 0, skipped: 1 });
     expect(twitterClient.postTweet).not.toHaveBeenCalled();
   });
 });

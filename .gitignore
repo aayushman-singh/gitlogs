@@ -6,6 +6,9 @@ logs/
 *.log
 .DS_Store
 Thumbs.db
+# Playwright MCP scratch output (screenshots, console logs)
+.playwright-mcp/
+**/.playwright-mcp/
 .vscode/
 .idea/
 .worktrees/

@@ -2,9 +2,10 @@
  * Mirrors src/commitIntelligence.js — keep in sync.
  *
  * ESM port of the deterministic commit-intelligence scorer so the keyless
- * /demo can run the REAL triage algorithm live in the browser — no backend,
+ * /demo can run the same triage algorithm live in the browser — no backend,
  * no network. Every constant and signal delta below is copied 1:1 from the
- * CommonJS backend module so identical input yields an identical score.
+ * CommonJS backend module so identical input yields an identical score; a
+ * parity test (tests/triage-parity.test.js) guards against drift.
  *
  * Pure functions, no Node/IO dependencies.
  */
@@ -69,6 +70,11 @@ export function parseConventional(message) {
 }
 
 function allFiles(commit) {
+  for (const k of ['added', 'modified', 'removed']) {
+    if (commit[k] !== undefined && !Array.isArray(commit[k])) {
+      throw new Error(`commit ${commit.id}: "${k}" must be an array, got ${typeof commit[k]}`);
+    }
+  }
   return [
     ...(commit.added || []),
     ...(commit.modified || []),
@@ -87,6 +93,12 @@ function isMerge(commit) {
  *            signals:Array<{label:string,delta:number,detail:string}>, rationale:string}}
  */
 export function scoreCommit(commit, options = {}) {
+  if (!commit || typeof commit !== 'object') {
+    throw new Error(`scoreCommit: expected a commit object, got ${commit === null ? 'null' : typeof commit}`);
+  }
+  if (typeof commit.id !== 'string' || typeof commit.message !== 'string') {
+    throw new Error(`scoreCommit: commit needs string id and message (id=${JSON.stringify(commit.id)})`);
+  }
   const minScore = options.minScore ?? 40;
   const { type, scope, breaking, subject } = parseConventional(commit.message);
   const files = allFiles(commit);
@@ -202,7 +214,8 @@ export function scoreCommit(commit, options = {}) {
   const worthy = score >= minScore;
 
   return {
-    sha: (commit.id || '').substring(0, 7),
+    id: commit.id, // full SHA — the safe identity/join key
+    sha: commit.id.substring(0, 7), // short SHA for display only
     score,
     worthy,
     type,
@@ -225,47 +238,19 @@ function buildRationale({ worthy, score, type, signals }) {
 }
 
 /**
- * Group worthy commits that are clearly part of the same unit of work
- * (same conventional scope, or the same type touching overlapping files), so a
- * burst of related commits can become one thread instead of N separate tweets.
- * @returns {Array<{key:string, reason:string, commits:Array}>}
- */
-export function groupRelatedCommits(scoredCommits) {
-  const groups = [];
-  const byScope = new Map();
-
-  for (const sc of scoredCommits) {
-    // Group key: prefer scope; else type. Commits with neither stay standalone.
-    const key = sc.scope ? `scope:${sc.scope}` : sc.type ? `type:${sc.type}` : `solo:${sc.sha}`;
-    if (!byScope.has(key)) byScope.set(key, []);
-    byScope.get(key).push(sc);
-  }
-
-  for (const [key, members] of byScope) {
-    if (members.length === 1 || key.startsWith('solo:')) {
-      groups.push({ key, reason: 'standalone', commits: members });
-    } else {
-      const label = key.startsWith('scope:')
-        ? `shared scope "${key.slice(6)}"`
-        : `related ${key.slice(5)} commits`;
-      groups.push({ key, reason: label, commits: members });
-    }
-  }
-  return groups;
-}
-
-/**
- * Triage a whole push: score every commit, split worthy/skipped, group worthy.
- * @param {Array} commits - GitHub webhook commit objects
+ * Triage a whole push: score every commit, split worthy from skipped.
+ * @param {Array} commits - GitHub webhook commit objects (must be an array)
  * @param {object} options - { minScore }
  */
 export function triagePush(commits, options = {}) {
+  if (!Array.isArray(commits)) {
+    throw new Error(`triagePush: expected an array of commits, got ${typeof commits}`);
+  }
   const minScore = options.minScore ?? 40;
-  const scored = (commits || []).map((c) => scoreCommit(c, { minScore }));
+  const scored = commits.map((c) => scoreCommit(c, { minScore }));
   const worthy = scored.filter((s) => s.worthy);
   const skipped = scored.filter((s) => !s.worthy);
-  const groups = groupRelatedCommits(worthy);
-  return { minScore, scored, worthy, skipped, groups };
+  return { minScore, scored, worthy, skipped };
 }
 
 // exported for tests / transparency

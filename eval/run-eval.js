@@ -1,54 +1,25 @@
 /**
  * Evaluation harness for the commit-intelligence worthiness classifier.
  *
- * WHAT IT DOES
- *   Loads eval/golden-commits.json (a human-labeled corpus where each commit is
- *   tagged "worthy" or "noise"), runs scoreCommit() from src/commitIntelligence.js
- *   over every commit, treats "worthy" as the positive class, and reports
- *   TP/FP/TN/FN, precision, recall, F1, accuracy, a confusion matrix, and a
- *   prominent list of every misclassification. Exit code is 0 iff accuracy clears
- *   a threshold (default 0.85) so this can gate CI.
+ * Loads eval/golden-commits.json (each commit labeled "worthy" or "noise"), runs
+ * scoreCommit() over every commit with "worthy" as the positive class, and
+ * reports TP/FP/TN/FN, precision, recall, F1, accuracy, a confusion matrix, and
+ * every misclassification. Gates CI: exit 0 iff accuracy, precision, recall, and
+ * F1 all clear their thresholds.
  *
- *   Run:    node eval/run-eval.js
- *   Args:   --min-score=<n>   classifier worthiness cutoff (default 40)
- *           --threshold=<f>   accuracy gate, 0..1 (default 0.85)
- *   Env:    EVAL_MIN_SCORE, EVAL_ACCURACY_THRESHOLD  (overridden by args)
+ *   Run:    node eval/run-eval.js   (or: pnpm eval)
+ *   Args:   --min-score=<n>   classifier cutoff (default 40)
+ *           --threshold=<f>   accuracy gate (default 0.85)
+ *           --precision=<f> --recall=<f> --f1=<f>  (each default 0.85)
+ *   Env:    EVAL_MIN_SCORE, EVAL_ACCURACY_THRESHOLD (overridden by args)
  *
- *   Deterministic and OFFLINE — no network, no API keys. The classifier under
- *   test is pure/LLM-free, so this harness is fully reproducible in CI.
+ * Deterministic and OFFLINE — no network, no API keys; fully reproducible in CI.
+ * Malformed corpus / missing fields / unknown labels throw loudly with the
+ * offending index (no silent fallbacks, no skipped rows).
  *
- * FAILURE BEHAVIOUR (per project rule: no silent fallbacks)
- *   Missing/unreadable/malformed corpus, a commit missing required fields, or an
- *   unknown label throws loudly with the offending index and value. The harness
- *   never substitutes defaults or skips bad rows.
- *
- * ─────────────────────────────────────────────────────────────────────────────
- * FUTURE EXTENSION POINT — optional LLM-judge mode for tweet QUALITY
- * ─────────────────────────────────────────────────────────────────────────────
- *   This harness evaluates ONLY the deterministic triage decision (worthy vs
- *   noise). It does NOT evaluate the quality of the generated tweet text, because
- *   that requires the Gemini diff→tweet step, which is non-deterministic and
- *   needs an API key — both at odds with an offline CI gate.
- *
- *   A future quality eval would live BEHIND a flag and stay opt-in:
- *
- *     1. Extend the corpus: add a `goldenTweet` (the ideal human-written tweet)
- *        and a representative `diff` to each WORTHY commit.
- *     2. Gate on a key: only activate when GEMINI_API_KEY is set AND an explicit
- *        flag is passed (e.g. `node eval/run-eval.js --judge`). With no key, the
- *        harness stays exactly as it is today — deterministic, offline, no calls.
- *     3. Generate: feed each (commit, diff) to the real diff→tweet generator.
- *     4. Judge: send {diff, goldenTweet, generatedTweet} to an LLM judge with a
- *        rubric (factual accuracy, specificity, no hallucinated numbers, tone,
- *        length ≤ 280) and ask for a 1–5 score + short justification per axis.
- *        Report mean scores and flag any generated tweet that invents facts not
- *        present in the diff.
- *     5. Determinism: pin the judge model + temperature 0, log every prompt and
- *        raw judge response (rich context for debugging), and treat a missing key
- *        or judge error as a LOUD failure of judge-mode — never a silent skip.
- *
- *   Deliberately NOT implemented here: no network code exists in this file. This
- *   block is the documented seam, nothing more.
+ * A future opt-in LLM-judge mode for tweet *quality* (diff→tweet) is described in
+ * DECISIONS.md; it is intentionally NOT implemented here — this file has no
+ * network code and stays a deterministic gate.
  */
 
 'use strict';
@@ -70,11 +41,14 @@ function readConfig(argv) {
   }
   const minScore = Number(args.get('min-score') ?? process.env.EVAL_MIN_SCORE ?? 40);
   const threshold = Number(args.get('threshold') ?? process.env.EVAL_ACCURACY_THRESHOLD ?? 0.85);
+  const precisionMin = Number(args.get('precision') ?? 0.85);
+  const recallMin = Number(args.get('recall') ?? 0.85);
+  const f1Min = Number(args.get('f1') ?? 0.85);
   if (!Number.isFinite(minScore)) throw new Error(`Invalid min-score: ${args.get('min-score')}`);
-  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
-    throw new Error(`Invalid threshold (must be 0..1): ${args.get('threshold')}`);
+  for (const [name, v] of [['threshold', threshold], ['precision', precisionMin], ['recall', recallMin], ['f1', f1Min]]) {
+    if (!Number.isFinite(v) || v < 0 || v > 1) throw new Error(`Invalid ${name} (must be 0..1): ${v}`);
   }
-  return { minScore, threshold };
+  return { minScore, threshold, precisionMin, recallMin, f1Min };
 }
 
 // ── Load + validate corpus (fail loudly with rich context) ─────────────────────
@@ -229,12 +203,23 @@ function main() {
   const results = evaluate(commits, config.minScore);
   printReport(results, config);
 
-  const passed = results.accuracy >= config.threshold;
+  // Gate on ALL of accuracy/precision/recall/F1 — accuracy alone can hide a
+  // classifier that spams false positives on an imbalanced corpus.
+  const gates = [
+    ['accuracy', results.accuracy, config.threshold],
+    ['precision', results.precision, config.precisionMin],
+    ['recall', results.recall, config.recallMin],
+    ['f1', results.f1, config.f1Min],
+  ];
+  const failures = gates.filter(([, v, min]) => !(v >= min));
+  const passed = failures.length === 0;
   console.log('═'.repeat(96));
   if (passed) {
-    console.log(`  RESULT: PASS — accuracy ${pct(results.accuracy)} >= threshold ${pct(config.threshold)}`);
+    console.log(`  RESULT: PASS — accuracy/precision/recall/F1 all >= their gates`);
   } else {
-    console.log(`  RESULT: FAIL — accuracy ${pct(results.accuracy)} < threshold ${pct(config.threshold)}`);
+    for (const [name, v, min] of failures) {
+      console.log(`  RESULT: FAIL — ${name} ${pct(v)} < gate ${pct(min)}`);
+    }
   }
   console.log('═'.repeat(96));
   console.log('');

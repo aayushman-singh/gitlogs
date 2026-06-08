@@ -382,62 +382,60 @@ async function handleWebhook(req, res) {
       console.log(`👤 User: ${user.display_name || user.user_id} (X auth: ${xOAuthUserId})`);
     }
 
-    // Generate/fetch repository context for enhanced AI prompts
-    const repoContext = await getOrGenerateRepoContext(repository, commits);
-    console.log(`📋 Repo context: ${repoContext.languages?.join(', ') || 'unknown stack'}`);
-
-    // Filter out merge commits
+    // Filter out merge commits, then run Commit Intelligence FIRST — before any
+    // expensive repo-context / diff / AI work — so a noise-only push (lockfile
+    // bumps, version tags, wip, vague/cosmetic commits) does zero downstream
+    // work. Every decision is logged with its rationale: observable, never silent.
     const nonMergeCommits = commits.filter(commit => !isMergeCommit(commit));
-
-    // Commit Intelligence: score each commit for tweet-worthiness and skip the
-    // noise (lockfile bumps, version tags, wip, vague/cosmetic commits). Every
-    // decision is logged with its rationale — observable, never silent.
+    const merges = commits.length - nonMergeCommits.length;
     const minScore = config.commitIntelligence?.minScore ?? 40;
     const triage = commitIntelligence.triagePush(nonMergeCommits, { minScore });
-    const worthyShas = new Set(triage.worthy.map(s => s.sha));
+    const worthyIds = new Set(triage.worthy.map(s => s.id)); // full SHA — safe key
 
     console.log(
-      `🧠 Triage: ${triage.worthy.length}/${nonMergeCommits.length} commits worth tweeting ` +
-      `(min score ${minScore}, skipped ${commits.length - nonMergeCommits.length} merges)`
+      `🧠 Triage: ${triage.worthy.length}/${nonMergeCommits.length} non-merge commits worth ` +
+      `tweeting (min score ${minScore}, ${merges} merges excluded)`
     );
-    for (const s of triage.skipped) {
-      console.log(`   ⏭️  ${s.sha} ${s.rationale}`);
-    }
-    for (const s of triage.worthy) {
-      console.log(`   ✅ ${s.sha} ${s.rationale}`);
-    }
+    for (const s of triage.skipped) console.log(`   ⏭️  ${s.sha} ${s.rationale}`);
+    for (const s of triage.worthy) console.log(`   ✅ ${s.sha} ${s.rationale}`);
 
     // Process only the worthy commits (preserve original push order).
-    const worthyCommits = nonMergeCommits.filter(c => worthyShas.has((c.id || '').substring(0, 7)));
+    const worthyCommits = nonMergeCommits.filter(c => worthyIds.has(c.id));
 
-    // Process commits with enhanced context (including two-stage diff analysis)
     const results = [];
-    for (const commit of worthyCommits) {
-      const result = await processCommit(commit, repository, pusher, {
-        repoContext,
-        userId,
-        xOAuthUserId,
-        githubUserId,  // For GitHub API authentication when fetching diffs
-        ref
-      });
-      results.push(result);
-    }
+    if (worthyCommits.length > 0) {
+      // Only now is repo context worth generating (it can hit the network).
+      const repoContext = await getOrGenerateRepoContext(repository, commits);
+      console.log(`📋 Repo context: ${repoContext.languages?.join(', ') || 'unknown stack'}`);
 
-    // Log queue stats for monitoring
-    const queueStats = geminiClient.getQueueStats();
-    if (queueStats) {
-      console.log(`📊 Queue stats: ${queueStats.currentQueueLength} pending, ${queueStats.totalProcessed} processed, ${queueStats.rateLimitRemaining} rate limit remaining`);
+      for (const commit of worthyCommits) {
+        const result = await processCommit(commit, repository, pusher, {
+          repoContext,
+          userId,
+          xOAuthUserId,
+          githubUserId,  // For GitHub API authentication when fetching diffs
+          ref
+        });
+        results.push(result);
+      }
+
+      const queueStats = geminiClient.getQueueStats();
+      if (queueStats) {
+        console.log(`📊 Queue stats: ${queueStats.currentQueueLength} pending, ${queueStats.totalProcessed} processed, ${queueStats.rateLimitRemaining} rate limit remaining`);
+      }
     }
 
     const successCount = results.filter(r => r.success).length;
     res.status(200).json({
       status: 'OK',
-      processed: successCount,
-      total: worthyCommits.length,
+      processed: successCount,        // commits that posted successfully
+      total: nonMergeCommits.length,  // non-merge commits considered (unchanged meaning)
       triage: {
-        totalCommits: commits.length,
+        totalCommits: commits.length, // = merges + considered
+        merges,
+        considered: nonMergeCommits.length,
         worthy: triage.worthy.length,
-        skipped: triage.skipped.length,
+        skipped: triage.skipped.length, // skipped == considered - worthy
         decisions: triage.scored.map(s => ({ sha: s.sha, score: s.score, worthy: s.worthy, rationale: s.rationale }))
       },
       userId

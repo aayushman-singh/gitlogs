@@ -82,19 +82,12 @@ describe('commitIntelligence.triagePush', () => {
     expect(t.worthy.map((s) => s.sha)).toEqual(['1111111', '4444444']);
     expect(t.skipped.map((s) => s.sha)).toEqual(['2222222', '3333333']);
     expect(t.scored.every((s) => s.rationale)).toBe(true);
+    expect(t.scored.every((s) => typeof s.id === 'string')).toBe(true); // full SHA carried
   });
-});
 
-describe('commitIntelligence.groupRelatedCommits', () => {
-  it('groups commits that share a conventional scope', () => {
-    const scored = ci.triagePush([
-      commit({ id: 'a111111', message: 'feat(editor): add bold button', modified: ['src/editor/a.js'] }),
-      commit({ id: 'b222222', message: 'feat(editor): add italic button', modified: ['src/editor/b.js'] }),
-      commit({ id: 'c333333', message: 'fix(parser): handle empty input gracefully now', modified: ['src/parser.js'] }),
-    ]).worthy;
-    const groups = ci.groupRelatedCommits(scored);
-    const editorGroup = groups.find((g) => g.key === 'scope:editor');
-    expect(editorGroup).toBeTruthy();
-    expect(editorGroup.commits.length).toBe(2);
+  it('throws on malformed input rather than silently coercing', () => {
+    expect(() => ci.triagePush(null)).toThrow();
+    expect(() => ci.scoreCommit({ id: 'abc', message: 5 })).toThrow();
+    expect(() => ci.scoreCommit({ id: 'abc', message: 'feat: x', added: 'nope' })).toThrow();
   });
 });

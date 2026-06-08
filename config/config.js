@@ -1,5 +1,20 @@
 require('dotenv').config();
 
+// Validate COMMIT_MIN_SCORE up front: an invalid value (e.g. NaN from
+// parseInt("abc")) would make `score >= min` always false and silently stop
+// tweeting everything. Fail loudly at startup instead.
+function parseMinScore(raw) {
+  if (raw === undefined || raw === '') return 40;
+  if (!/^\d+$/.test(raw.trim())) {
+    throw new Error(`COMMIT_MIN_SCORE must be an integer 0-100, got "${raw}"`);
+  }
+  const n = parseInt(raw, 10);
+  if (n < 0 || n > 100) {
+    throw new Error(`COMMIT_MIN_SCORE must be 0-100, got ${n}`);
+  }
+  return n;
+}
+
 module.exports = {
   server: {
     port: process.env.PORT || 3000,
@@ -42,9 +57,7 @@ module.exports = {
   // to be tweeted. Below this, the commit is skipped with a logged rationale.
   // Set to 0 to disable filtering (tweet everything, legacy behavior).
   commitIntelligence: {
-    minScore: process.env.COMMIT_MIN_SCORE !== undefined
-      ? parseInt(process.env.COMMIT_MIN_SCORE, 10)
-      : 40
+    minScore: parseMinScore(process.env.COMMIT_MIN_SCORE)
   },
   // Queue configuration for rate limiting and retry mechanism
   queue: {

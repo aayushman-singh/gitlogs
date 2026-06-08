@@ -85,3 +85,40 @@ are the real engines, not degraded shims).
 - **F2 eval harness:** `eval/golden-commits.json` labeled corpus + `eval/run-eval.js`
   (`pnpm eval`) → precision/recall/accuracy of the worthiness classifier vs labels,
   with per-case rationale. Documents an optional LLM-judge mode for keyed runs.
+
+### V2 codex review applied (codex/2026-06-08-v2.md)
+- **Blocker — triage ordering:** moved commit triage BEFORE `getOrGenerateRepoContext`
+  so a noise-only push does zero repo-index/diff/AI work; context is generated only
+  when ≥1 worthy commit exists.
+- **Blocker — config validation:** `COMMIT_MIN_SCORE` is now strictly parsed (integer
+  0-100) and fails startup loudly; an invalid value used to become `NaN` and silently
+  stop all tweeting.
+- **High — commit identity:** triage rows now carry the full SHA (`id`); the worthy
+  filter joins on full SHA, not a 7-char prefix `startsWith` (collision-safe).
+- **High — response counts reconcile:** response reports `total` (= non-merge
+  considered, original meaning) plus `triage.{totalCommits, merges, considered,
+  worthy, skipped}` which now add up.
+- **High — dead grouping removed:** `groupRelatedCommits` was never wired into posting
+  and its file-overlap claim didn't match the data. Removed it (backend + demo mirror +
+  test) rather than ship dead/misleading code. Thread-grouping of related commits is a
+  real future feature (needs changes to the posting path) — deferred, not faked.
+- **High — no silent coercion:** `scoreCommit`/`triagePush`/`allFiles` now throw on
+  malformed input (non-object commit, non-string id/message, non-array file lists)
+  instead of treating null/missing as `[]`.
+- **Medium — drift guard:** added `tests/triage-parity.test.js` asserting the browser
+  ESM port produces byte-identical score/verdict/rationale to the backend over the
+  whole golden corpus.
+- **Medium — eval gate:** `pnpm eval` now gates on precision/recall/F1 (each ≥ 0.85),
+  not accuracy alone; removed the roadmap-comment-as-code block.
+- **Naming:** stripped "REAL/impressive" hype from comments. Kept `commitIntelligence`/
+  `worthy`/`skipped` as deliberate, clear domain terms (a full rename to
+  `tweetEligibility` would be churn across tested+demoed code for marginal gain).
+
+#### Future opt-in LLM-judge eval (documented seam, intentionally NOT built)
+A tweet-*quality* eval (vs the current worthiness-*classification* eval) would: add a
+`goldenTweet` + `diff` to each worthy corpus row; activate only with `GEMINI_API_KEY`
+set AND an explicit `--judge` flag (no key ⇒ today's offline behavior, unchanged);
+feed (commit, diff) to the real diff→tweet generator; send {diff, goldenTweet,
+generatedTweet} to an LLM judge (temp 0, pinned model) scoring factual accuracy /
+specificity / no-hallucinated-numbers / tone / ≤280 chars; fail loudly on missing key
+or judge error. No network code ships today.
