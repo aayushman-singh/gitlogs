@@ -89,9 +89,11 @@ class QueueService {
     if (this.isRunning) return;
     
     this.isRunning = true;
-    
-    // Restore pending items from database
-    this.restoreFromDatabase();
+
+    // Restore pending items from database (only when persistence is on)
+    if (this.persistenceEnabled) {
+      this.restoreFromDatabase();
+    }
     
     // Clean up old items periodically (every hour)
     this.cleanupInterval = setInterval(() => {

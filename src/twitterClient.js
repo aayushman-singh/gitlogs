@@ -78,15 +78,12 @@ function initializeTwitterClient(userId = 'default') {
   
   const authClient = new auth.OAuth2User(authClientConfig);
 
-  // Get token from database for this user
+  // Get token for THIS user only — never fall back to the legacy 'default'
+  // token. Posting with another account's token (multi-user) is a security bug;
+  // a missing token must fail loudly so the user is told to authenticate.
   let storedToken = null;
   if (oauthHandler) {
-    try {
-      // Get token for specific user (supports per-user tokens)
-      storedToken = require('./database').getOAuthToken(userId);
-    } catch (error) {
-      // Database might not have a token yet
-    }
+    storedToken = require('./database').getOAuthTokenNoFallback(userId);
   }
 
   if (!storedToken || !storedToken.access_token) {

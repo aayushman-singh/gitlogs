@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -125,5 +125,71 @@ describe('POST /webhook/github — end-to-end pipeline', () => {
 
     expect(res.status).toBe(200);
     expect(twitterClient.postTweet).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /webhook/github — multi-user product path', () => {
+  // A repo that is NOT in ALLOWED_REPOS and uses its OWN per-repo webhook secret,
+  // owned by a real seeded user. Proves the DB-backed multi-user resolution:
+  // per-repo secret verification + user attribution (not the legacy 'default').
+  const MU_USER = 'github:90000002';
+  const MU_REPO = 'mira-builds/design-system';
+  const MU_SECRET = 'fixture-secret-mira-design';
+
+  beforeAll(() => {
+    database.upsertUser({
+      userId: MU_USER,
+      githubUsername: 'mira-builds',
+      displayName: 'Mira Builds',
+      email: 'mira-builds@fixtures.invalid',
+      tier: 'free',
+    });
+    database.addUserRepo(MU_USER, MU_REPO, MU_SECRET);
+  });
+
+  beforeEach(() => twitterClient.postTweet.mockClear());
+
+  function muPayload(sha) {
+    return JSON.stringify({
+      ...PUSH_PAYLOAD,
+      after: sha,
+      repository: {
+        ...PUSH_PAYLOAD.repository,
+        name: 'design-system',
+        full_name: MU_REPO,
+        owner: { name: 'mira-builds', login: 'mira-builds', id: 90000002 },
+      },
+      commits: [{ ...PUSH_PAYLOAD.commits[0], id: sha }],
+    });
+  }
+
+  it('authorizes via per-repo secret + DB enablement and attributes to the owner', async () => {
+    const raw = muPayload('cafe0011223344556677889900aabbccddeeff00');
+    const res = await postWebhook({ body: raw, signature: sign(raw, MU_SECRET) });
+
+    expect(res.status).toBe(200);
+    // userId is the seeded owner, NOT the legacy 'default'
+    expect(res.body).toMatchObject({ status: 'OK', processed: 1, userId: MU_USER });
+    expect(twitterClient.postTweet).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects the per-repo webhook when signed with the wrong secret', async () => {
+    const raw = muPayload('beef0011223344556677889900aabbccddeeff11');
+    const res = await postWebhook({ body: raw, signature: sign(raw, 'not-the-repo-secret') });
+
+    expect(res.status).toBe(401);
+    expect(twitterClient.postTweet).not.toHaveBeenCalled();
+  });
+
+  it('is idempotent: a redelivered commit is not posted twice', async () => {
+    const sha = 'd00d0011223344556677889900aabbccddeeff22';
+    const first = await postWebhook({ body: muPayload(sha), signature: sign(muPayload(sha), MU_SECRET) });
+    expect(first.status).toBe(200);
+    expect(twitterClient.postTweet).toHaveBeenCalledTimes(1);
+
+    twitterClient.postTweet.mockClear();
+    const second = await postWebhook({ body: muPayload(sha), signature: sign(muPayload(sha), MU_SECRET) });
+    expect(second.status).toBe(200);
+    expect(twitterClient.postTweet).not.toHaveBeenCalled(); // skipped as already tweeted
   });
 });

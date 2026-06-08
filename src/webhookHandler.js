@@ -30,8 +30,14 @@ function verifyGitHubSignature(payload, signature, repoFullName = null) {
   }
   
   if (!secret) {
-    console.warn('⚠️  Webhook secret not set - skipping verification (NOT RECOMMENDED)');
-    return true;
+    // Fail CLOSED: with no secret we cannot authenticate the sender, so we must
+    // reject rather than accept forged push events. A misconfigured server that
+    // rejects all webhooks is loud and safe; one that accepts everything is not.
+    console.error(
+      '❌ No webhook secret configured (per-repo or global WEBHOOK_SECRET). ' +
+        'Rejecting webhook — cannot verify signature.'
+    );
+    return false;
   }
 
   if (!signature) {
@@ -134,6 +140,17 @@ async function processCommit(commit, repository, pusher, options = {}) {
   
   try {
     console.log(`📝 Processing commit: ${commit.id.substring(0, 7)} (user: ${userId}, xAuth: ${xOAuthUserId})`);
+
+    // Idempotency: GitHub re-delivers webhooks. Skip commits already tweeted so
+    // a redelivery never double-posts (the post→persist order can't dedup after
+    // the fact). Cheap check before any AI/network work.
+    if (config.database.enabled) {
+      const alreadyTweeted = await database.getTweetsForRepo(repository.full_name);
+      if (alreadyTweeted.some((t) => t.commit_sha === commit.id)) {
+        console.log(`⏭️  Commit ${commit.id.substring(0, 7)} already tweeted — skipping (idempotent)`);
+        return { success: true, skipped: true };
+      }
+    }
 
     const commitData = commitFormatter.formatCommit(commit, repository, pusher);
 
@@ -401,8 +418,11 @@ async function handleWebhook(req, res) {
     });
 
   } catch (error) {
+    // Fail loudly with 500 so GitHub retries transient failures instead of us
+    // acknowledging success and silently dropping the push. (Bad-input cases
+    // above already return explicit 4xx and won't reach here.)
     console.error('❌ Webhook handler error:', error);
-    res.status(200).send('Error processed');
+    res.status(500).json({ status: 'error', message: error.message });
   }
 }
 

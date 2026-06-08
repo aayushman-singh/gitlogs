@@ -1206,6 +1206,7 @@ module.exports = {
   // X OAuth functions (per-user)
   storeOAuthToken,
   getOAuthToken,
+  getOAuthTokenNoFallback,
   isOAuthTokenValid,
   getRefreshToken,
   deleteOAuthToken,
