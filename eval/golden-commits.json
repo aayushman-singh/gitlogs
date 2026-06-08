@@ -1,0 +1,275 @@
+{
+  "_about": "Labeled golden corpus for the gitlogs commit-intelligence classifier. Each entry is a fictional, NON-PII commit with a human label ('worthy' = should be tweeted, 'noise' = should be skipped) and a one-line note explaining the call. This file is the SPEC for 'good triage': the eval harness scores src/commitIntelligence.js against these labels. Keep labels honest and defensible; do not edit labels to make a buggy classifier pass.",
+  "commits": [
+    {
+      "id": "a1b2c3d",
+      "message": "feat(api): add cursor pagination to /users endpoint",
+      "added": ["src/routes/users.js", "src/lib/cursor.js"],
+      "modified": ["src/routes/index.js"],
+      "removed": [],
+      "label": "worthy",
+      "note": "Substantive user-facing feature touching source with a descriptive subject."
+    },
+    {
+      "id": "b2c3d4e",
+      "message": "fix(auth): reject expired JWT before DB lookup",
+      "added": [],
+      "modified": ["src/middleware/auth.js", "src/lib/jwt.js"],
+      "removed": [],
+      "label": "worthy",
+      "note": "Real bug fix in auth path; clear behavioral change worth announcing."
+    },
+    {
+      "id": "c3d4e5f",
+      "message": "perf(db): batch ledger writes, p99 820ms to 140ms",
+      "added": [],
+      "modified": ["src/db/ledger.js", "src/db/writer.js"],
+      "removed": [],
+      "label": "worthy",
+      "note": "Measurable performance win with concrete numbers — prime tweet material."
+    },
+    {
+      "id": "d4e5f6a",
+      "message": "feat(billing): support proration on mid-cycle plan changes",
+      "added": ["src/billing/proration.js"],
+      "modified": ["src/billing/subscriptions.js", "src/billing/invoice.js"],
+      "removed": [],
+      "label": "worthy",
+      "note": "New billing capability with multiple source files; clearly newsworthy."
+    },
+    {
+      "id": "e5f6a7b",
+      "message": "fix(checkout): prevent double-charge on rapid resubmit",
+      "added": ["src/checkout/idempotency.js"],
+      "modified": ["src/checkout/handler.js"],
+      "removed": [],
+      "label": "worthy",
+      "note": "High-impact correctness fix; descriptive and source-touching."
+    },
+    {
+      "id": "f6a7b8c",
+      "message": "feat(api)!: drop deprecated v1 token endpoints",
+      "added": [],
+      "modified": ["src/routes/auth.js"],
+      "removed": ["src/routes/v1/token.js"],
+      "label": "worthy",
+      "note": "Breaking change (!) — exactly the kind of news consumers must hear about."
+    },
+    {
+      "id": "0a7b8c9",
+      "message": "perf(search): add trigram index, cut query time 60%",
+      "added": ["src/search/index.js"],
+      "modified": ["src/search/query.js"],
+      "removed": [],
+      "label": "worthy",
+      "note": "Quantified perf improvement touching source."
+    },
+    {
+      "id": "1b8c9d0",
+      "message": "fix(upload): stream large files instead of buffering in memory",
+      "added": [],
+      "modified": ["src/upload/stream.js", "src/upload/handler.js"],
+      "removed": [],
+      "label": "worthy",
+      "note": "Real reliability fix; descriptive subject, source files."
+    },
+    {
+      "id": "2c9d0e1",
+      "message": "feat(webhooks): add HMAC signature verification",
+      "added": ["src/webhooks/verify.js"],
+      "modified": ["src/webhooks/router.js"],
+      "removed": [],
+      "label": "worthy",
+      "note": "Security feature; clear and substantive."
+    },
+    {
+      "id": "3d0e1f2",
+      "message": "refactor(payments): extract retry policy into a reusable module",
+      "added": ["src/payments/retryPolicy.js"],
+      "modified": ["src/payments/gateway.js", "src/payments/charge.js"],
+      "removed": [],
+      "label": "worthy",
+      "note": "Borderline: refactors rarely make news, but this is a descriptive, source-touching, focused change. Calling it worthy because the scorer (refactor base 30 + source 12 + focused 6 + descriptive 8 + scope 3 = 59) treats it as substantive engineering work and it crosses the bar."
+    },
+    {
+      "id": "4e1f2a3",
+      "message": "revert: undo the aggressive cache TTL change from 9f8e7d6",
+      "added": [],
+      "modified": ["src/cache/config.js"],
+      "removed": [],
+      "label": "worthy",
+      "note": "Borderline: a revert of a user-visible change is itself news ('we rolled it back'). Scorer: revert base 40 + source 12 + focused 6 = 58."
+    },
+    {
+      "id": "5f2a3b4",
+      "message": "feat(cli): add --watch mode to the dev server command",
+      "added": ["src/cli/watch.js"],
+      "modified": ["src/cli/dev.js"],
+      "removed": [],
+      "label": "worthy",
+      "note": "Developer-facing feature; descriptive and source-touching."
+    },
+    {
+      "id": "6a3b4c5",
+      "message": "chore(deps): bump lockfile after dependency update",
+      "added": [],
+      "modified": ["pnpm-lock.yaml"],
+      "removed": [],
+      "label": "noise",
+      "note": "Lockfile-only dependency bump — classic spam, should be skipped."
+    },
+    {
+      "id": "7b4c5d6",
+      "message": "build(deps): update package-lock.json",
+      "added": [],
+      "modified": ["package-lock.json"],
+      "removed": [],
+      "label": "noise",
+      "note": "Another lockfile-only bump; no human-readable change."
+    },
+    {
+      "id": "8c5d6e7",
+      "message": "Merge branch 'main' into feature/new-dashboard",
+      "added": [],
+      "modified": ["src/dashboard/widget.js", "src/dashboard/layout.js"],
+      "removed": [],
+      "label": "noise",
+      "note": "Merge commit — not original news even though it lists source files."
+    },
+    {
+      "id": "9d6e7f8",
+      "message": "wip",
+      "added": [],
+      "modified": ["src/feature/scratch.js"],
+      "removed": [],
+      "label": "noise",
+      "note": "Work-in-progress scratch commit; vague + wip signal."
+    },
+    {
+      "id": "0e7f8a9",
+      "message": "fixup! tweak the thing",
+      "added": [],
+      "modified": ["src/feature/thing.js"],
+      "removed": [],
+      "label": "noise",
+      "note": "fixup! squash commit — internal noise, not news."
+    },
+    {
+      "id": "1f8a9b0",
+      "message": "v1.2.3",
+      "added": [],
+      "modified": ["package.json"],
+      "removed": [],
+      "label": "noise",
+      "note": "Bare version tag commit touching only package.json."
+    },
+    {
+      "id": "2a9b0c1",
+      "message": "chore(release): bump version to 2.0.0",
+      "added": [],
+      "modified": ["package.json"],
+      "removed": [],
+      "label": "noise",
+      "note": "Version bump / release commit; no substantive change."
+    },
+    {
+      "id": "3b0c1d2",
+      "message": "update",
+      "added": [],
+      "modified": ["src/util/helpers.js"],
+      "removed": [],
+      "label": "noise",
+      "note": "Vague one-word subject; uninformative for a changelog."
+    },
+    {
+      "id": "4c1d2e3",
+      "message": "changes",
+      "added": [],
+      "modified": ["src/app.js", "src/config.js"],
+      "removed": [],
+      "label": "noise",
+      "note": "Vague subject; no signal about what actually changed."
+    },
+    {
+      "id": "5d2e3f4",
+      "message": "style: run prettier across the repo",
+      "added": [],
+      "modified": ["src/a.js", "src/b.js"],
+      "removed": [],
+      "label": "noise",
+      "note": "Formatting-only change; cosmetic + style base, not newsworthy."
+    },
+    {
+      "id": "6e3f4a5",
+      "message": "docs: fix typo in README",
+      "added": [],
+      "modified": ["README.md"],
+      "removed": [],
+      "label": "noise",
+      "note": "Typo-only doc fix; cosmetic, no product news."
+    },
+    {
+      "id": "7f4a5b6",
+      "message": "chore(assets): replace logo and favicon",
+      "added": [],
+      "modified": ["public/logo.png", "public/favicon.ico"],
+      "removed": [],
+      "label": "noise",
+      "note": "Assets-only change; no behavioral/news content."
+    },
+    {
+      "id": "8a5b6c7",
+      "message": "ci: cache pnpm store in GitHub Actions",
+      "added": [],
+      "modified": [".github/workflows/ci.yml"],
+      "removed": [],
+      "label": "noise",
+      "note": "CI plumbing; internal tooling, not user-facing news."
+    },
+    {
+      "id": "9b6c7d8",
+      "message": "test: add coverage for the cursor pagination helper",
+      "added": ["tests/cursor.test.js"],
+      "modified": [],
+      "removed": [],
+      "label": "noise",
+      "note": "Test-only change; low base, not announcement-worthy on its own."
+    },
+    {
+      "id": "0c7d8e9",
+      "message": "docs: rewrite the entire architecture guide with new diagrams",
+      "added": ["docs/architecture.md", "docs/diagrams/flow.md", "docs/diagrams/data.md"],
+      "modified": ["docs/README.md"],
+      "removed": ["docs/old-architecture.md"],
+      "label": "noise",
+      "note": "Genuinely borderline. A major docs overhaul COULD be worth a tweet, but per the project's triage stance docs are background work and the subject names no product change. Labeling noise: docs base 22 + descriptive 8 + focused 6 = ~36, below the 40 bar — and that matches the editorial judgment that a doc rewrite is not product news."
+    },
+    {
+      "id": "1d8e9f0",
+      "message": "feat: stuff",
+      "added": ["src/feature/big.js"],
+      "modified": ["src/feature/core.js"],
+      "removed": [],
+      "label": "noise",
+      "note": "Borderline trap: real source change but a useless subject. The triage rule is that a tweet needs a describable change; 'stuff' gives the generator nothing. Scorer: feat 60 - vague 22 + source 12 + focused 6 = 56, so the classifier will likely call it WORTHY. Labeled noise on editorial grounds — this is an expected hard case / possible classifier gap."
+    },
+    {
+      "id": "2e9f0a1",
+      "message": "refactor: rename internal variables for clarity",
+      "added": [],
+      "modified": ["src/internal/state.js"],
+      "removed": [],
+      "label": "noise",
+      "note": "Internal-only refactor with no external behavior change. Scorer: refactor 30 + source 12 + focused 6 + descriptive 8 = 56 -> likely WORTHY. Labeled noise editorially; another expected hard case."
+    },
+    {
+      "id": "3f0a1b2",
+      "message": "feat(notifications): add email digest with daily/weekly cadence",
+      "added": ["src/notifications/digest.js", "src/notifications/schedule.js"],
+      "modified": ["src/notifications/index.js"],
+      "removed": [],
+      "label": "worthy",
+      "note": "Clear user-facing feature; descriptive, multiple source files."
+    }
+  ]
+}

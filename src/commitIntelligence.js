@@ -48,6 +48,11 @@ const LOCKFILES = [
 const ASSET_RE = /\.(png|jpe?g|gif|svg|ico|webp|woff2?|ttf|eot|mp4|mp3|pdf|lock|map|min\.js|min\.css|snap)$/i;
 const SOURCE_RE = /\.(js|jsx|ts|tsx|py|go|rs|rb|java|kt|swift|c|cc|cpp|h|hpp|cs|php|scala|ex|exs|vue|svelte)$/i;
 const GENERATED_RE = /(dist\/|build\/|\.min\.|node_modules\/|vendor\/|__snapshots__\/|\.generated\.)/i;
+const TEST_RE = /(\.(test|spec)\.[jt]sx?$)|((^|\/)(tests?|__tests__|specs?)\/)/i;
+// "Internal plumbing" markers: changes that touch code but aren't user-facing news.
+const INTERNAL_RE = /\b(rename|reorg|reorganize|reorder|moved?|extract|inline|tidy|clean\s?up|cleanup|internal|formatting|whitespace|gofmt|prettier|lint)\b/i;
+// Subject is contentless even with a strong type prefix (e.g. "feat: stuff").
+const VAGUE_HARD_CAP = 35;
 
 const TRIVIAL_SUBJECTS = new Set([
   'update', 'updates', 'fix', 'fixes', 'changes', 'change', 'stuff', 'misc',
@@ -140,7 +145,16 @@ function scoreCommit(commit, options = {}) {
     score -= 25;
   }
 
-  const touchesSource = files.some((f) => SOURCE_RE.test(f) && !GENERATED_RE.test(f));
+  const onlyTests = fileCount > 0 && files.every((f) => TEST_RE.test(f));
+  if (onlyTests) {
+    add('tests-only', -15, 'only test files changed — not user-facing news');
+    score -= 15;
+  }
+
+  // Source bonus excludes test/generated files so test-only changes don't earn it.
+  const touchesSource = files.some(
+    (f) => SOURCE_RE.test(f) && !GENERATED_RE.test(f) && !TEST_RE.test(f)
+  );
   if (touchesSource) {
     add('source', 12, 'touches application source code');
     score += 12;
@@ -158,12 +172,23 @@ function scoreCommit(commit, options = {}) {
   const subjLc = lc(subject);
   const subjWords = subjLc.split(/\s+/).filter(Boolean);
 
-  if (TRIVIAL_SUBJECTS.has(subjLc) || subject.length < 8) {
-    add('vague', -22, `vague subject "${subject}"`);
+  // A contentless subject means there's nothing to actually say in a tweet —
+  // even a strong `feat:`/`fix:` base shouldn't carry "feat: stuff" over the
+  // bar. Hard-cap the score rather than just nudging it.
+  const vagueHard = TRIVIAL_SUBJECTS.has(subjLc) || subjWords.length <= 1 || subject.length < 8;
+  if (vagueHard) {
+    add('vague', -22, `vague/contentless subject "${subject}"`);
     score -= 22;
   } else if (subject.length >= 20 && subjWords.length >= 4) {
     add('descriptive', 8, 'specific, descriptive subject');
     score += 8;
+  }
+
+  // Internal plumbing (renames, cleanups, reformatting) under refactor/chore/
+  // style touches code but isn't user-facing news.
+  if (/^(refactor|chore|style)$/.test(type || '') && INTERNAL_RE.test(subjLc)) {
+    add('internal', -18, 'internal-only change (rename/cleanup) — not user-facing news');
+    score -= 18;
   }
 
   if (/\b(wip|do not merge|dnm|temp|tmp|squash|fixup)\b/i.test(subjLc)) {
@@ -187,6 +212,8 @@ function scoreCommit(commit, options = {}) {
   }
 
   // --- Clamp + verdict -------------------------------------------------------
+  // A contentless subject caps the score below the worthy bar regardless of type.
+  if (vagueHard) score = Math.min(score, VAGUE_HARD_CAP);
   score = Math.max(0, Math.min(100, Math.round(score)));
   const worthy = score >= minScore;
 

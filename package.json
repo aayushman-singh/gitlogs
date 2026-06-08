@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "seed": "node scripts/seed.js",
-    "index-repo": "node src/repoIndexer.js"
+    "index-repo": "node src/repoIndexer.js",
+    "eval": "node eval/run-eval.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
