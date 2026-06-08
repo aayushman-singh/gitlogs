@@ -18,8 +18,15 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           port: ${{ secrets.EC2_PORT || 22 }}
           script: |
-            set -e
+            set -euo pipefail
             cd ~/gitlogs
-            git pull
-            pnpm i
+            git pull --ff-only
+            # Reproducible installs from the committed lockfiles.
+            pnpm install --frozen-lockfile
+            pnpm --dir frontend install --frozen-lockfile
+            # Build the SPA BEFORE restarting — the backend serves frontend/dist
+            # (src/server.js). Without this the served frontend is stale/missing.
+            VITE_API_BASE="${VITE_API_BASE:-https://api-gitlogs.aayushman.dev}" \
+              pnpm --dir frontend run build
             sudo systemctl restart gitlogs
+            sudo systemctl --no-pager status gitlogs | head -n 5

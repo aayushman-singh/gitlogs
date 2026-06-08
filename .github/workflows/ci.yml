@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (syntax + tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      # No ESLint is configured yet; use node --check as a lightweight syntax
+      # gate so a broken file fails CI. (Full ESLint setup is a tracked follow-up.)
+      - name: Syntax check (node --check)
+        run: |
+          find src scripts -name '*.js' -print0 | xargs -0 -n1 node --check
+
+      - name: Test (Vitest)
+        run: pnpm test
+
+  frontend:
+    name: Frontend (build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install (frozen lockfile)
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      - name: Build SPA
+        env:
+          VITE_API_BASE: https://api-gitlogs.aayushman.dev
+        run: pnpm --dir frontend run build
