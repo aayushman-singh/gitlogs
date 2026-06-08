@@ -6,30 +6,31 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "dev:all": "concurrently \"npm run dev\" \"npm run frontend:dev\"",
-    "frontend:dev": "cd frontend && npm run dev",
-    "frontend:build": "cd frontend && npm run build",
-    "frontend:install": "cd frontend && npm install",
-    "setup": "npm install && npm run frontend:install",
-    "build": "npm run frontend:build",
-    "test:local": "node test-local.js",
-    "test:webhook": "node test-webhook.js",
-    "test:gemini": "node test-gemini.js",
-    "index-repo": "node src/repoIndexer.js",
-    "seed": "node scripts/seed.js"
+    "dev:all": "concurrently \"pnpm dev\" \"pnpm frontend:dev\"",
+    "frontend:dev": "pnpm --dir frontend dev",
+    "frontend:build": "pnpm --dir frontend build",
+    "frontend:install": "pnpm --dir frontend install",
+    "setup": "pnpm install && pnpm frontend:install",
+    "build": "pnpm frontend:build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "seed": "node scripts/seed.js",
+    "index-repo": "node src/repoIndexer.js"
   },
   "dependencies": {
-    "express": "^4.21.2",
-    "twitter-api-sdk": "^1.2.1",
     "@google/generative-ai": "^0.21.0",
-    "dotenv": "^16.4.7",
-    "sql.js": "^1.11.0",
+    "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
-    "cookie-parser": "^1.4.6"
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "sql.js": "^1.11.0",
+    "twitter-api-sdk": "^1.2.1"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
-    "nodemon": "^3.1.9"
+    "nodemon": "^3.1.9",
+    "supertest": "^7.2.2",
+    "vitest": "^2.1.9"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -45,4 +46,3 @@
     "automation"
   ]
 }
-

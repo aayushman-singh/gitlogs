@@ -1,0 +1,5 @@
+# pnpm requires native build scripts to be explicitly allowlisted.
+# esbuild (used by vitest/vite) needs its postinstall to fetch the native binary,
+# otherwise the test runner fails on a clean clone (especially on Windows).
+allowBuilds:
+  esbuild: true

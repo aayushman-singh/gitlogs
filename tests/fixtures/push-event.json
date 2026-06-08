@@ -1,0 +1,32 @@
+{
+  "ref": "refs/heads/main",
+  "before": "0000000000000000000000000000000000000000",
+  "after": "a1b2c3d4e5f60718293abc4d5e6f708192a3b4c5",
+  "repository": {
+    "id": 900000001,
+    "name": "payments-api",
+    "full_name": "octo-dev/payments-api",
+    "private": false,
+    "owner": { "name": "octo-dev", "login": "octo-dev", "id": 90000001 },
+    "html_url": "https://github.com/octo-dev/payments-api",
+    "description": "Payments API",
+    "default_branch": "main"
+  },
+  "pusher": { "name": "octo-dev", "email": "octo-dev@fixtures.invalid" },
+  "sender": { "login": "octo-dev", "id": 90000001 },
+  "commits": [
+    {
+      "id": "a1b2c3d4e5f60718293abc4d5e6f708192a3b4c5",
+      "tree_id": "ffeeddccbbaa00998877665544332211aabbccdd",
+      "distinct": true,
+      "message": "feat: add idempotency keys to POST /charges to prevent double-charging on retries",
+      "timestamp": "2026-05-20T09:14:00Z",
+      "url": "https://github.com/octo-dev/payments-api/commit/a1b2c3d",
+      "author": { "name": "octo-dev", "email": "octo-dev@fixtures.invalid", "username": "octo-dev" },
+      "committer": { "name": "octo-dev", "email": "octo-dev@fixtures.invalid", "username": "octo-dev" },
+      "added": ["src/middleware/idempotency.js"],
+      "removed": [],
+      "modified": ["src/routes/charges.js", "src/db/schema.sql"]
+    }
+  ]
+}

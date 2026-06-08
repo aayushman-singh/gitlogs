@@ -1147,76 +1147,91 @@ app.use((err, req, res, next) => {
   });
 });
 
-const PORT = config.server.port;
-const server = app.listen(PORT, () => {
-  console.log(`🚀 Git→X Bot listening on port ${PORT}`);
-  console.log(`🌐 Frontend: ${FRONTEND_URL}`);
-  console.log(`📡 Webhook: /webhook/github`);
-  console.log(`🔐 Auth endpoints:`);
-  if (config.github.clientId) {
-    console.log(`   GitHub: /auth/github → /auth/github/callback`);
-  }
-  if (config.twitter.clientId) {
-    console.log(`   X:      /auth/x → /auth/x/callback`);
-  }
-  console.log(`📊 API: /api/me, /api/me/repos`);
-  console.log(`🔒 Webhook secret: ${config.github.webhookSecret ? 'SET' : 'NOT SET'}`);
-  console.log(`💾 Queue persistence: enabled (survives restarts)`);
-});
-
 // ============================================
-// Graceful Shutdown Handling
+// Server bootstrap (only when run directly)
 // ============================================
+// Exporting `app` lets tests (supertest) import the wired Express app WITHOUT
+// binding a port or installing process-level signal handlers. The listen/shutdown
+// block runs only when this file is executed directly (`node src/server.js`).
 
-let isShuttingDown = false;
-
-async function gracefulShutdown(signal) {
-  if (isShuttingDown) {
-    console.log('⚠️  Shutdown already in progress...');
-    return;
-  }
-  
-  isShuttingDown = true;
-  console.log(`\n🛑 Received ${signal}, starting graceful shutdown...`);
-  
-  // Stop accepting new connections
-  server.close((err) => {
-    if (err) {
-      console.error('❌ Error closing server:', err.message);
-    } else {
-      console.log('✅ Server closed - no new connections');
+function startServer() {
+  const PORT = config.server.port;
+  const server = app.listen(PORT, () => {
+    console.log(`🚀 Git→X Bot listening on port ${PORT}`);
+    console.log(`🌐 Frontend: ${FRONTEND_URL}`);
+    console.log(`📡 Webhook: /webhook/github`);
+    console.log(`🔐 Auth endpoints:`);
+    if (config.github.clientId) {
+      console.log(`   GitHub: /auth/github → /auth/github/callback`);
     }
+    if (config.twitter.clientId) {
+      console.log(`   X:      /auth/x → /auth/x/callback`);
+    }
+    console.log(`📊 API: /api/me, /api/me/repos`);
+    console.log(`🔒 Webhook secret: ${config.github.webhookSecret ? 'SET' : 'NOT SET'}`);
+    console.log(`💾 Queue persistence: enabled (survives restarts)`);
   });
-  
-  try {
-    // Stop queue service (persists pending items)
-    console.log('💾 Stopping queue service...');
-    shutdownQueueService();
-    
-    // Close database connection (saves and closes)
-    console.log('💾 Closing database...');
-    database.closeDatabase();
-    
-    console.log('✅ Graceful shutdown complete');
-    process.exit(0);
-  } catch (error) {
-    console.error('❌ Error during shutdown:', error.message);
-    process.exit(1);
+
+  let isShuttingDown = false;
+
+  async function gracefulShutdown(signal) {
+    if (isShuttingDown) {
+      console.log('⚠️  Shutdown already in progress...');
+      return;
+    }
+
+    isShuttingDown = true;
+    console.log(`\n🛑 Received ${signal}, starting graceful shutdown...`);
+
+    // Stop accepting new connections
+    server.close((err) => {
+      if (err) {
+        console.error('❌ Error closing server:', err.message);
+      } else {
+        console.log('✅ Server closed - no new connections');
+      }
+    });
+
+    try {
+      // Stop queue service (persists pending items)
+      console.log('💾 Stopping queue service...');
+      shutdownQueueService();
+
+      // Close database connection (saves and closes)
+      console.log('💾 Closing database...');
+      database.closeDatabase();
+
+      console.log('✅ Graceful shutdown complete');
+      process.exit(0);
+    } catch (error) {
+      console.error('❌ Error during shutdown:', error.message);
+      process.exit(1);
+    }
   }
+
+  // Handle different shutdown signals
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+  // Handle uncaught exceptions gracefully
+  process.on('uncaughtException', (error) => {
+    console.error('❌ Uncaught Exception:', error);
+    gracefulShutdown('uncaughtException');
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+    // Don't exit on unhandled rejections, just log them
+  });
+
+  return server;
 }
 
-// Handle different shutdown signals
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+if (require.main === module) {
+  startServer();
+}
 
-// Handle uncaught exceptions gracefully
-process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
-  gracefulShutdown('uncaughtException');
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-  // Don't exit on unhandled rejections, just log them
-});
+module.exports = app;
+module.exports.app = app;
+module.exports.startServer = startServer;
 
