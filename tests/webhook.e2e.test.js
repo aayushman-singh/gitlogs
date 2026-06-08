@@ -192,4 +192,35 @@ describe('POST /webhook/github — multi-user product path', () => {
     expect(second.status).toBe(200);
     expect(twitterClient.postTweet).not.toHaveBeenCalled(); // skipped as already tweeted
   });
+
+  it('commit intelligence filters a noise commit (lockfile bump) — never posts it', async () => {
+    twitterClient.postTweet.mockClear();
+    const noiseSha = 'face0011223344556677889900aabbccddeeff33';
+    const raw = JSON.stringify({
+      ...PUSH_PAYLOAD,
+      after: noiseSha,
+      repository: {
+        ...PUSH_PAYLOAD.repository,
+        name: 'design-system',
+        full_name: MU_REPO,
+        owner: { name: 'mira-builds', login: 'mira-builds', id: 90000002 },
+      },
+      commits: [
+        {
+          ...PUSH_PAYLOAD.commits[0],
+          id: noiseSha,
+          message: 'chore: bump dependencies',
+          added: [],
+          modified: ['pnpm-lock.yaml'],
+          removed: [],
+        },
+      ],
+    });
+    const res = await postWebhook({ body: raw, signature: sign(raw, MU_SECRET) });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ processed: 0, total: 0 });
+    expect(res.body.triage).toMatchObject({ totalCommits: 1, worthy: 0, skipped: 1 });
+    expect(twitterClient.postTweet).not.toHaveBeenCalled();
+  });
 });

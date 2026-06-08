@@ -7,6 +7,7 @@ const twitterClient = require('./twitterClient');
 const database = require('./database');
 const repoIndexer = require('./repoIndexer');
 const diffAnalyzer = require('./diffAnalyzer');
+const commitIntelligence = require('./commitIntelligence');
 
 /**
  * Verify GitHub webhook signature
@@ -385,14 +386,33 @@ async function handleWebhook(req, res) {
     const repoContext = await getOrGenerateRepoContext(repository, commits);
     console.log(`📋 Repo context: ${repoContext.languages?.join(', ') || 'unknown stack'}`);
 
-    // Filter out merge commits and process individual commits
+    // Filter out merge commits
     const nonMergeCommits = commits.filter(commit => !isMergeCommit(commit));
-    
-    console.log(`📝 Processing ${nonMergeCommits.length} non-merge commits (skipped ${commits.length - nonMergeCommits.length} merge commits)`);
+
+    // Commit Intelligence: score each commit for tweet-worthiness and skip the
+    // noise (lockfile bumps, version tags, wip, vague/cosmetic commits). Every
+    // decision is logged with its rationale — observable, never silent.
+    const minScore = config.commitIntelligence?.minScore ?? 40;
+    const triage = commitIntelligence.triagePush(nonMergeCommits, { minScore });
+    const worthyShas = new Set(triage.worthy.map(s => s.sha));
+
+    console.log(
+      `🧠 Triage: ${triage.worthy.length}/${nonMergeCommits.length} commits worth tweeting ` +
+      `(min score ${minScore}, skipped ${commits.length - nonMergeCommits.length} merges)`
+    );
+    for (const s of triage.skipped) {
+      console.log(`   ⏭️  ${s.sha} ${s.rationale}`);
+    }
+    for (const s of triage.worthy) {
+      console.log(`   ✅ ${s.sha} ${s.rationale}`);
+    }
+
+    // Process only the worthy commits (preserve original push order).
+    const worthyCommits = nonMergeCommits.filter(c => worthyShas.has((c.id || '').substring(0, 7)));
 
     // Process commits with enhanced context (including two-stage diff analysis)
     const results = [];
-    for (const commit of nonMergeCommits) {
+    for (const commit of worthyCommits) {
       const result = await processCommit(commit, repository, pusher, {
         repoContext,
         userId,
@@ -413,7 +433,13 @@ async function handleWebhook(req, res) {
     res.status(200).json({
       status: 'OK',
       processed: successCount,
-      total: nonMergeCommits.length,
+      total: worthyCommits.length,
+      triage: {
+        totalCommits: commits.length,
+        worthy: triage.worthy.length,
+        skipped: triage.skipped.length,
+        decisions: triage.scored.map(s => ({ sha: s.sha, score: s.score, worthy: s.worthy, rationale: s.rationale }))
+      },
       userId
     });
 

@@ -38,6 +38,14 @@ module.exports = {
     apiKey: process.env.GEMINI_API_KEY,
     model: process.env.GEMINI_MODEL || 'gemini-2.0-flash'
   },
+  // Commit Intelligence — minimum worthiness score (0-100) a commit must reach
+  // to be tweeted. Below this, the commit is skipped with a logged rationale.
+  // Set to 0 to disable filtering (tweet everything, legacy behavior).
+  commitIntelligence: {
+    minScore: process.env.COMMIT_MIN_SCORE !== undefined
+      ? parseInt(process.env.COMMIT_MIN_SCORE, 10)
+      : 40
+  },
   // Queue configuration for rate limiting and retry mechanism
   queue: {
     // Gemini API rate limits: Free tier = 15 RPM, Pay-as-you-go = 1000+ RPM

@@ -54,3 +54,34 @@ Format: `[YYYY-MM-DD] PHASE.step — decision — rationale`.
 - **Deferred (not codex-P0..P3 for this diff):** database.js's broad catch→sentinel
   pattern + file-based OAuth fallback (pre-existing, working code; would be an unrelated
   refactor). Startup placeholder-secret rejection (P2) → candidate for Phase B.
+
+## 2026-06-08 — V2 (go big: make the AI pipeline impressive)
+
+Per HANDOFF_V2 discovery protocol. Phase 1 closed credibility gaps; V2 makes the
+product itself impressive. Brainstorm + scoring (a = improves real auto-tweet
+quality, b = wow-for-hire, c = feasible in one session; 1-5 each):
+
+| Candidate | a | b | c | notes |
+|---|---|---|---|---|
+| **Commit Intelligence layer** (worthiness scoring, noise-kill, grouping, rationale) | 5 | 5 | 5 | pipeline currently tweets EVERY non-merge commit → spam; deciding *what's worth saying* is the biggest real quality lever and is observable |
+| **Prompt/triage eval harness** (golden corpus + precision/recall) | 4 | 5 | 4 | evaluation rigor = the strongest hire signal; proves the intelligence layer works; runs offline/keyless |
+| Persona prompts (real backend, side-by-side) | 3 | 4 | 4 | partly represented in /demo already (canned toggle); tone variety doesn't fix "what to tweet" |
+| Recursive self-host static feed | 1 | 3 | 3 | presentation only; clearly faked without a real account |
+| Observable pipeline trace object/API | 3 | 4 | 3 | folded INTO Commit Intelligence (the triage IS the trace) |
+
+**Decision: ship Commit Intelligence (F1) + its Eval Harness (F2)** — a coherent
+1-2 punch that directly raises real auto-tweet quality AND demonstrates eval
+rigor. Both are **deterministic-core** (no LLM, no API keys) so they run in CI,
+in tests, and in the keyless /demo — which also fits the no-fallback rule (these
+are the real engines, not degraded shims).
+
+- **F1 `src/commitIntelligence.js`:** `scoreCommit(commit)` → {score 0-100,
+  worthy, signals[], rationale}; `groupRelatedCommits(commits)`; `triagePush()`.
+  Deterministic signals: conventional-commit type weighting, noise patterns
+  (lockfile/deps-only, merges, version bumps, wip/typo/formatting), substance
+  (files touched, source vs config/asset, message specificity). Pipeline skips
+  sub-threshold commits (`COMMIT_MIN_SCORE`, default 40) and LOGS each skip with
+  rationale (observable, never silent). Surfaced in /demo as a "triage" stage.
+- **F2 eval harness:** `eval/golden-commits.json` labeled corpus + `eval/run-eval.js`
+  (`pnpm eval`) → precision/recall/accuracy of the worthiness classifier vs labels,
+  with per-case rationale. Documents an optional LLM-judge mode for keyed runs.
