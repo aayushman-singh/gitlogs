@@ -1,17 +1,9 @@
 // API utility functions
 
-// Get backend URL - use production URL for production builds
-// In development, use empty string to leverage Vite proxy
+// Get backend URL from build-time env (VITE_API_BASE).
+// Default to the local backend when the env var is unset — never a dead remote.
 export function getBackendUrl() {
-  if (import.meta.env.VITE_API_BASE_URL) {
-    return import.meta.env.VITE_API_BASE_URL;
-  }
-  // Production builds should use the actual backend URL
-  if (import.meta.env.PROD) {
-    return 'https://api-gitlogs.aayushman.dev';
-  }
-  // Development uses proxy (empty string)
-  return '';
+  return import.meta.env.VITE_API_BASE || 'http://localhost:3000';
 }
 
 const API_BASE = getBackendUrl();

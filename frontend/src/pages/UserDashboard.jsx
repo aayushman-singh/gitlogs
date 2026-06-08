@@ -455,9 +455,13 @@ export default function UserDashboard() {
     </>
   );
 
+  // Build-time feature flag: scheduling UI calls /api/me/schedule, which the
+  // backend does not implement yet. Default OFF when VITE_FEATURE_SCHEDULING is unset.
+  const schedulingEnabled = import.meta.env.VITE_FEATURE_SCHEDULING === 'true';
+
   const tabs = [
     { id: 'actions', label: 'Actions', icon: HiLightningBolt },
-    { id: 'schedule', label: 'Schedule', icon: HiClock },
+    ...(schedulingEnabled ? [{ id: 'schedule', label: 'Schedule', icon: HiClock }] : []),
     { id: 'customisation', label: 'Customisation', icon: HiAdjustments }
   ];
 
@@ -550,7 +554,7 @@ export default function UserDashboard() {
       {/* Tab Content */}
       <div className="dashboard-tab-content">
         {activeTab === 'actions' && <ActionsContent />}
-        {activeTab === 'schedule' && <ScheduleTab />}
+        {schedulingEnabled && activeTab === 'schedule' && <ScheduleTab />}
         {activeTab === 'customisation' && <Customisation user={user} xConnected={xConnected} />}
       </div>
 

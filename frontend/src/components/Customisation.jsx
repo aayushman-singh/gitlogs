@@ -669,16 +669,29 @@ function TemplateEditorModal({ isOpen, onClose, onSave, template, variables, use
   );
 }
 
+// Build-time feature flag: the post-settings panel calls /api/me/post-settings,
+// which the backend does not implement yet. Default OFF when the env var is unset.
+const POST_SETTINGS_ENABLED = import.meta.env.VITE_FEATURE_POST_SETTINGS === 'true';
+
 export default function Customisation({ user, xConnected }) {
   const [loading, setLoading] = useState(true);
   const [customTemplates, setCustomTemplates] = useState([]);
   const [activeTemplateId, setActiveTemplateId] = useState('default');
   const [result, setResult] = useState({ type: '', message: '' });
   const [xUserInfo, setXUserInfo] = useState(null);
-  
+
+  // Post-settings state — only used by the feature-flagged panel below.
+  const [postSettings, setPostSettings] = useState({
+    includeEmoji: true,
+    includeHashtags: true,
+    includeLink: true,
+    aiEnhance: false,
+  });
+  const [savingSettings, setSavingSettings] = useState(false);
+
   // Presets are constants, no need to fetch from API
   const presets = Object.values(TEMPLATE_PRESETS);
-  
+
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState(null);
@@ -686,7 +699,9 @@ export default function Customisation({ user, xConnected }) {
   useEffect(() => {
     loadTemplates();
     loadXUserInfo();
-    loadPostSettings();
+    if (POST_SETTINGS_ENABLED) {
+      loadPostSettings();
+    }
   }, [xConnected]);
 
   const loadXUserInfo = async () => {
@@ -885,6 +900,7 @@ export default function Customisation({ user, xConnected }) {
       </div>
 
       {/* Post Settings */}
+      {POST_SETTINGS_ENABLED && (
       <div className="card mb-4">
         <div className="card-header">
           <h2 className="card-title">
@@ -1010,6 +1026,7 @@ export default function Customisation({ user, xConnected }) {
           </button>
         </div>
       </div>
+      )}
 
       {/* How It Works */}
       <div className="card">
