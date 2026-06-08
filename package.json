@@ -15,7 +15,8 @@
     "test:local": "node test-local.js",
     "test:webhook": "node test-webhook.js",
     "test:gemini": "node test-gemini.js",
-    "index-repo": "node src/repoIndexer.js"
+    "index-repo": "node src/repoIndexer.js",
+    "seed": "node scripts/seed.js"
   },
   "dependencies": {
     "express": "^4.21.2",
