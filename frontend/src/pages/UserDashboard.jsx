@@ -1,9 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
-import { HiRefresh, HiViewList, HiSortAscending, HiLightningBolt, HiAdjustments, HiMenu, HiChevronDown, HiX, HiClock } from 'react-icons/hi';
+import { HiRefresh, HiViewList, HiSortAscending, HiLightningBolt, HiAdjustments, HiMenu, HiChevronDown, HiX } from 'react-icons/hi';
 import { PiGithubLogoBold } from 'react-icons/pi';
 import { getMyRepos, setMyRepoOgPost, getHealth, getBackendUrl, enableRepo, disableRepo, getCurrentUser, disconnectX } from '../utils/api';
 import Customisation from '../components/Customisation';
-import ScheduleTab from '../components/ScheduleTab';
 import logo from '../../gitlogs.png';
 
 export default function UserDashboard() {
@@ -461,7 +460,6 @@ export default function UserDashboard() {
 
   const tabs = [
     { id: 'actions', label: 'Actions', icon: HiLightningBolt },
-    ...(schedulingEnabled ? [{ id: 'schedule', label: 'Schedule', icon: HiClock }] : []),
     { id: 'customisation', label: 'Customisation', icon: HiAdjustments }
   ];
 
@@ -554,7 +552,6 @@ export default function UserDashboard() {
       {/* Tab Content */}
       <div className="dashboard-tab-content">
         {activeTab === 'actions' && <ActionsContent />}
-        {schedulingEnabled && activeTab === 'schedule' && <ScheduleTab />}
         {activeTab === 'customisation' && <Customisation user={user} xConnected={xConnected} />}
       </div>
 

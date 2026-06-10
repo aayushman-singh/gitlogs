@@ -12,8 +12,7 @@ Thumbs.db
 .vscode/
 .idea/
 .worktrees/
-# pnpm-lock.yaml IS committed for reproducible installs (pnpm is the package manager).
-package-lock.json
+pnpm-lock.yaml
 yarn.lock
 
 /frontend/dist

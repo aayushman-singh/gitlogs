@@ -26,16 +26,9 @@ jobs:
           script: |
             set -euo pipefail
             cd ~/gitlogs
-            if [ -z "${VITE_API_BASE:-}" ]; then
-              echo "❌ VITE_API_BASE is not set (define it as a repo Actions variable)." >&2
-              exit 1
-            fi
             git pull --ff-only
-            # Reproducible installs from the committed lockfiles.
-            pnpm install --frozen-lockfile
-            pnpm --dir frontend install --frozen-lockfile
-            # Build the SPA BEFORE restarting — the backend serves frontend/dist
-            # (src/server.js). Without this the served frontend is stale/missing.
-            pnpm --dir frontend run build
+            npm ci
+            npm --prefix frontend ci
+            npm run build
             sudo systemctl restart gitlogs
             sudo systemctl --no-pager status gitlogs | head -n 5

@@ -6,17 +6,16 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "dev:all": "concurrently \"pnpm dev\" \"pnpm frontend:dev\"",
-    "frontend:dev": "pnpm --dir frontend dev",
-    "frontend:build": "pnpm --dir frontend build",
-    "frontend:install": "pnpm --dir frontend install",
-    "setup": "pnpm install && pnpm frontend:install",
-    "build": "pnpm frontend:build",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "seed": "node scripts/seed.js",
-    "index-repo": "node src/repoIndexer.js",
-    "eval": "node eval/run-eval.js"
+    "dev:all": "concurrently \"npm run dev\" \"npm run frontend:dev\"",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "frontend:install": "npm --prefix frontend ci",
+    "setup": "npm ci && npm run frontend:install",
+    "build": "npm run frontend:build",
+    "test:local": "node test-local.js",
+    "test:webhook": "node test-webhook.js",
+    "test:gemini": "node test-gemini.js",
+    "index-repo": "node src/repoIndexer.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",

@@ -79,46 +79,33 @@ For the full sequence, OAuth flows, data model, and documented failure modes, se
 
 ## Quick start
 
-Requires **Node >= 18** and **pnpm**. Windows, macOS, and Linux are all supported (the codebase is developed on Windows). Lockfiles are committed (root + `frontend/`) for reproducible installs.
+Prerequisites: Node.js 18+, npm, a GitHub OAuth app, an X OAuth 2.0 app, and a Gemini API key.
 
 ```bash
-git clone https://github.com/aayushman-singh/git-twitter-bot.git gitlogs
+git clone https://github.com/aayushman-singh/gitlogs.git
 cd gitlogs
-
-pnpm setup            # install backend + frontend deps
-cp .env.example .env  # fill in your keys (see Configuration)
-pnpm seed             # populate a demo SQLite db with fixtures
-pnpm dev:all          # backend (nodemon) + Vite dev server together
+npm run setup
+cp .env.example .env
+# Fill in the required .env values listed below.
+npm run build
+npm start
 ```
 
-Then open the dashboard at `http://localhost:5173` or the keyless demo at `http://localhost:5173/demo`.
+The backend serves the built Vite app from `frontend/dist`, so `npm run setup` installs both root and frontend dependencies, and `npm run build` must run before `npm start`.
+If you change `PORT`, update `FRONTEND_URL`, `API_BASE_URL`, `VITE_API_BASE_URL`, and `OAUTH_CALLBACK_URL` to the same host and port before building.
 
-```bash
-pnpm test             # run the Vitest backend suite
-pnpm build            # build the SPA to frontend/dist
-```
+Required `.env` values for the full local flow:
 
-## Stack
-
-| Layer | Tech |
+| Variable | Purpose |
 | --- | --- |
-| Frontend | React 18 · Vite 5 · PrimeReact · React Router |
-| Backend | Node.js · Express 4 |
-| Datastore | SQLite via [sql.js](https://sql.js.org) (WASM, single-file) |
-| AI | Google Gemini — two-stage diff analysis + changelog generation |
-| Auth | GitHub OAuth2 (login + webhook control) · X OAuth 2.0 with PKCE (posting) |
-
-The backend is a single Express process that also serves the built SPA from `frontend/dist` in production.
-
-## Configuration
-
-Copy `.env.example` to `.env` and fill in real values — every value in the example is a placeholder. The key groups:
-
-- **GitHub OAuth** — `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` (create an OAuth app at github.com/settings/developers).
-- **Webhook secret** — `WEBHOOK_SECRET`. **Do not skip this.** Signature verification fails *closed*: with no secret configured, every incoming webhook is rejected rather than trusted. Generate one with `openssl rand -hex 20`.
-- **X OAuth 2.0** — `OAUTH_CLIENT_ID` (required), `OAUTH_CLIENT_SECRET` (optional, enables confidential-client mode), `OAUTH_CALLBACK_URL`.
-- **Gemini** — `GEMINI_API_KEY`, `GEMINI_MODEL` (default in the example is `gemini-2.5-flash`). Get a key at aistudio.google.com/app/apikey.
-- **Server** — `PORT`, `FRONTEND_URL`, `API_BASE_URL`, `DATABASE_PATH`, `ADMIN_API_KEY` (gates the `/api/*` admin routes), plus optional queue/rate-limit tuning (`QUEUE_MAX_RPM`, `QUEUE_MAX_RETRIES`, ...).
+| `FRONTEND_URL` | Browser redirect target after OAuth, usually `http://localhost:3000` for the built local app |
+| `API_BASE_URL` | Public backend URL used for OAuth callbacks and GitHub webhooks; use `http://localhost:3000` for localhost-only OAuth testing |
+| `VITE_API_BASE_URL` | Backend URL baked into the Vite frontend at build time; use the same local URL as `API_BASE_URL` before `npm run build` |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth login and repository access |
+| `OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET` | X OAuth 2.0 app credentials for connecting user X accounts |
+| `OAUTH_CALLBACK_URL` | X OAuth callback, usually `${API_BASE_URL}/auth/x/callback` |
+| `WEBHOOK_SECRET` | Shared secret for GitHub webhook signature verification |
+| `GEMINI_API_KEY` | Gemini key used to generate changelog/tweet text |
 
 ## API
 
@@ -145,8 +132,10 @@ A representative subset — the server also exposes template CRUD
 ## Testing
 
 ```bash
-pnpm test        # one-shot Vitest run
-pnpm test:watch  # watch mode
+npm run setup    # Install backend and frontend dependencies
+npm run dev:all  # Run Express and Vite together
+npm run build    # Build frontend/dist for npm start
+npm start        # Serve the built frontend and API
 ```
 
 The backend suite (`tests/`) covers a **webhook end-to-end test** (`webhook.e2e.test.js`) — driving a signed push payload through the wired Express app via supertest, including the multi-user per-repo-secret path, signature rejection, and idempotent redelivery — and the **queue mechanics** (`queue.test.js`): retry with exponential backoff and give-up-after-max-retries.
