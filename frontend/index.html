@@ -30,8 +30,23 @@
   <meta name="twitter:image" content="https://gitlogs.aayushman.dev/gitlogs-opengraph.png">
   
   <!-- Theme Color -->
-  <meta name="theme-color" content="#0d1117">
-  <meta name="msapplication-TileColor" content="#0d1117">
+  <meta name="theme-color" content="#0a0b0d">
+  <meta name="msapplication-TileColor" content="#0a0b0d">
+
+  <!-- Set theme before first paint to avoid a flash of the wrong theme -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('gl-theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
 </head>
 <body>
   <div id="root"></div>
