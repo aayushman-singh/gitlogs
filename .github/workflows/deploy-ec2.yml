@@ -35,7 +35,7 @@ jobs:
             export VITE_API_BASE="${VITE_API_BASE:-${API_BASE_URL:-}}"
             : "${VITE_API_BASE:?Set repo variable VITE_API_BASE or API_BASE_URL in ~/gitlogs/.env}"
             npm ci
-            npm --prefix frontend ci
+            npm --prefix frontend ci --include=dev
             npm run build
             sudo systemctl restart gitlogs
             sudo systemctl --no-pager status gitlogs | head -n 5

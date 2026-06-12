@@ -85,7 +85,7 @@ ALLOWED_REPOS=                          # empty = accept all enabled repos
 git clone https://github.com/aayushman-singh/git-twitter-bot.git ~/gitlogs
 cd ~/gitlogs
 npm ci
-npm --prefix frontend ci
+npm --prefix frontend ci --include=dev
 VITE_API_BASE=https://<your-api-domain> npm --prefix frontend run build
 # (.env already in place from step 2)
 node src/server.js     # or via systemd, below
