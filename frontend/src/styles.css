@@ -6,8 +6,6 @@
    aliased so existing markup re-skins for free and stays theme-aware.
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
-
 :root {
   /* ---- Type families ---- */
   --font-sans: 'Geist', 'SF Pro Display', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -1692,6 +1690,29 @@ code {
 }
 
 @media (max-width: 520px) {
+  .header-content { gap: var(--s-2); }
+  .nav { gap: var(--s-1); min-width: 0; }
+  .nav-link { padding: var(--s-2); font-size: 13px; }
+  .theme-toggle { width: 34px; height: 34px; flex: 0 0 34px; }
+  .header .btn-github.btn-sm {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    padding: 0;
+    flex: 0 0 34px;
+  }
+  .header .btn-github.btn-sm svg { margin-right: 0; }
+  .header-login-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
   .logo-mark { display: none; }
   .logo-mark-compact { display: block; width: 32px; height: 32px; transform: none; }
 }
