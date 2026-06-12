@@ -20,17 +20,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
+          cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Install (frozen lockfile)
-        run: pnpm install --frozen-lockfile
+        run: npm ci
 
       # No ESLint is configured yet; use node --check as a lightweight syntax
       # gate so a broken file fails CI. (Full ESLint setup is a tracked follow-up.)
@@ -39,7 +36,7 @@ jobs:
           find src scripts -name '*.js' -print0 | xargs -0 -n1 node --check
 
       - name: Test (Vitest)
-        run: pnpm test
+        run: npm test
 
   frontend:
     name: Frontend (build)
@@ -47,22 +44,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install (frozen lockfile)
-        run: pnpm --dir frontend install --frozen-lockfile
+        run: npm --prefix frontend ci
 
       - name: Build SPA
         env:
           # Build-validation only; value is irrelevant here (the SPA isn't served
           # from CI). Real deploys set VITE_API_BASE to the actual API origin.
           VITE_API_BASE: https://api.example.invalid
-        run: pnpm --dir frontend run build
+        run: npm --prefix frontend run build

@@ -14,8 +14,8 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           # Public API origin the SPA is built against. Set this as a repo
-          # Actions *variable* (Settings → Variables), NOT hardcoded — there is
-          # no safe default (the old gitlogs host is dead).
+          # Actions *variable* (Settings → Variables), or define API_BASE_URL
+          # in the host .env. There is no hardcoded default.
           VITE_API_BASE: ${{ vars.VITE_API_BASE }}
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -27,6 +27,13 @@ jobs:
             set -euo pipefail
             cd ~/gitlogs
             git pull --ff-only
+            if [ -f .env ]; then
+              set -a
+              . ./.env
+              set +a
+            fi
+            export VITE_API_BASE="${VITE_API_BASE:-${API_BASE_URL:-}}"
+            : "${VITE_API_BASE:?Set repo variable VITE_API_BASE or API_BASE_URL in ~/gitlogs/.env}"
             npm ci
             npm --prefix frontend ci
             npm run build

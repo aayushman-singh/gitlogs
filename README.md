@@ -19,7 +19,7 @@ There's a **keyless `/demo` route** — no GitHub, no X, no API keys, no backend
 Run it locally:
 
 ```bash
-pnpm setup && pnpm dev:all
+npm run setup && npm run dev:all
 # then open http://localhost:5173/demo
 ```
 
@@ -92,7 +92,7 @@ npm start
 ```
 
 The backend serves the built Vite app from `frontend/dist`, so `npm run setup` installs both root and frontend dependencies, and `npm run build` must run before `npm start`.
-If you change `PORT`, update `FRONTEND_URL`, `API_BASE_URL`, `VITE_API_BASE_URL`, and `OAUTH_CALLBACK_URL` to the same host and port before building.
+If you change `PORT`, update `FRONTEND_URL`, `API_BASE_URL`, `VITE_API_BASE`, and `OAUTH_CALLBACK_URL` to the same host and port before building.
 
 Required `.env` values for the full local flow:
 
@@ -100,7 +100,7 @@ Required `.env` values for the full local flow:
 | --- | --- |
 | `FRONTEND_URL` | Browser redirect target after OAuth, usually `http://localhost:3000` for the built local app |
 | `API_BASE_URL` | Public backend URL used for OAuth callbacks and GitHub webhooks; use `http://localhost:3000` for localhost-only OAuth testing |
-| `VITE_API_BASE_URL` | Backend URL baked into the Vite frontend at build time; use the same local URL as `API_BASE_URL` before `npm run build` |
+| `VITE_API_BASE` | Backend URL baked into the Vite frontend at build time; use the same local URL as `API_BASE_URL` before `npm run build` |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth login and repository access |
 | `OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET` | X OAuth 2.0 app credentials for connecting user X accounts |
 | `OAUTH_CALLBACK_URL` | X OAuth callback, usually `${API_BASE_URL}/auth/x/callback` |
@@ -148,7 +148,7 @@ A single Express process serves the React SPA, terminates both OAuth flows, veri
 
 1. Fork the repo and create a branch off `main` (`feat/...`, `fix/...`).
 2. Make atomic commits with [Conventional Commit](https://www.conventionalcommits.org) messages (`feat:`, `fix:`, `docs:`, ...).
-3. Make sure `pnpm test` passes.
+3. Make sure `npm test` passes.
 4. Open a pull request describing the change and the user-facing impact.
 
 ## Author

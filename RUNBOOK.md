@@ -84,10 +84,9 @@ ALLOWED_REPOS=                          # empty = accept all enabled repos
 ```bash
 git clone https://github.com/aayushman-singh/git-twitter-bot.git ~/gitlogs
 cd ~/gitlogs
-corepack enable && corepack prepare pnpm@latest --activate   # if pnpm absent
-pnpm install --frozen-lockfile
-pnpm --dir frontend install --frozen-lockfile
-VITE_API_BASE=https://<your-api-domain> pnpm --dir frontend run build
+npm ci
+npm --prefix frontend ci
+VITE_API_BASE=https://<your-api-domain> npm --prefix frontend run build
 # (.env already in place from step 2)
 node src/server.js     # or via systemd, below
 ```
@@ -128,7 +127,7 @@ sudo systemctl status gitlogs
 ## 4. Continuous deploy (GitHub Actions → EC2)
 
 `.github/workflows/deploy-ec2.yml` SSHes in on push to `main`, pulls, installs
-from the frozen lockfiles, **builds the frontend**, and restarts the service.
+from the frozen npm lockfiles, **builds the frontend**, and restarts the service.
 
 Required repo **Actions secrets** (Settings → Secrets and variables → Actions):
 
@@ -139,9 +138,10 @@ Required repo **Actions secrets** (Settings → Secrets and variables → Action
 | `EC2_SSH_KEY` | private key authorized on the host |
 | `EC2_PORT` | ssh port (optional, defaults to 22) |
 
-Also set **`VITE_API_BASE`** as a repo **Actions variable** (Settings → Secrets
-and variables → Actions → Variables) — the SPA is built against it. There is no
-default (the old host is dead); the deploy **fails loudly** if it's unset.
+Set **`VITE_API_BASE`** as a repo **Actions variable** (Settings → Secrets and
+variables → Actions → Variables), or set `API_BASE_URL` in `~/gitlogs/.env` on
+the EC2 host. The SPA is built against that origin. There is no hardcoded
+default; the deploy **fails loudly** if both are unset.
 
 > **Known tradeoff (codex review):** the workflow currently builds on the prod
 > host. For a hardened setup, build the SPA artifact in CI and ship only
@@ -170,19 +170,19 @@ builds when `VITE_API_BASE` is unset, pass a value at build time even though the
 demo never calls it.
 
 **Vercel** (root directory = `frontend/`):
-- Build command: `pnpm build`
+- Build command: `npm run build`
 - Output dir: `dist`
 - Env: `VITE_API_BASE = https://<your-api-domain>` (or any placeholder)
 - `frontend/vercel.json` already provides the SPA rewrite so `/demo` deep-links.
 
 ```bash
 # from the frontend/ directory, with the Vercel CLI authenticated:
-VITE_API_BASE=https://gitlogs.example pnpm build
+VITE_API_BASE=https://gitlogs.example npm run build
 npx vercel deploy --prebuilt --prod   # or `npx vercel` and follow prompts
 ```
 
 **Cloudflare Pages**:
-- Build command: `pnpm build`  · Output: `frontend/dist`  · Root: `frontend`
+- Build command: `npm run build`  · Output: `frontend/dist`  · Root: `frontend`
 - Or direct upload: `npx wrangler pages deploy frontend/dist`
 
 After deploying, update the **Demo** badge/link in `README.md` with the live URL.
