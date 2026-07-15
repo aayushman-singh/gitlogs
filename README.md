@@ -23,7 +23,7 @@ npm run setup && npm run dev:all
 # then open http://localhost:5173/demo
 ```
 
-A hosted demo link is pending deployment — see the **Demo** badge above once it's live.
+In production, Vercel serves the frontend and `/demo` from the same SPA deploy.
 
 ### Example output
 
@@ -91,7 +91,7 @@ npm run build
 npm start
 ```
 
-The backend serves the built Vite app from `frontend/dist`, so `npm run setup` installs both root and frontend dependencies, and `npm run build` must run before `npm start`.
+For local single-process runs, the backend can serve the built Vite app from `frontend/dist`, so `npm run setup` installs both root and frontend dependencies, and `npm run build` must run before `npm start`. Production deploys split this: Vercel serves the frontend, and EC2 serves the API.
 If you change `PORT`, update `FRONTEND_URL`, `API_BASE_URL`, `VITE_API_BASE`, and `OAUTH_CALLBACK_URL` to the same host and port before building.
 
 Required `.env` values for the full local flow:
@@ -134,15 +134,15 @@ A representative subset — the server also exposes template CRUD
 ```bash
 npm run setup    # Install backend and frontend dependencies
 npm run dev:all  # Run Express and Vite together
-npm run build    # Build frontend/dist for npm start
-npm start        # Serve the built frontend and API
+npm run build    # Build frontend/dist for local single-process npm start
+npm start        # Serve the local built frontend and API
 ```
 
 The backend suite (`tests/`) covers a **webhook end-to-end test** (`webhook.e2e.test.js`) — driving a signed push payload through the wired Express app via supertest, including the multi-user per-repo-secret path, signature rejection, and idempotent redelivery — and the **queue mechanics** (`queue.test.js`): retry with exponential backoff and give-up-after-max-retries.
 
 ## Architecture
 
-A single Express process serves the React SPA, terminates both OAuth flows, verifies and processes webhooks, and persists everything to a single-file sql.js database. Full component map, sequence diagrams, ER model, and a candid list of known weaknesses live in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+In production, Vercel serves the React SPA and the Express process handles API, OAuth, webhooks, and persistence. For local single-process runs, Express can also serve `frontend/dist`. Full component map, sequence diagrams, ER model, and a candid list of known weaknesses live in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Contributing
 

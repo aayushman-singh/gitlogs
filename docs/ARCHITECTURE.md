@@ -2,7 +2,7 @@
 
 ## System overview
 
-GitLogs turns a `git push` into a published changelog tweet. A developer signs in with GitHub, picks a repository, and GitLogs installs a `push` webhook on it. From then on, every push fires `POST /webhook/github`; the backend verifies the GitHub HMAC signature, resolves which user owns the repo, and for each non-merge commit runs a two-stage AI pipeline — Stage 1 fetches the real commit diff from the GitHub REST API and asks Gemini to summarize it factually; Stage 2 feeds that grounded summary into the user's prompt template (AI-expanded only if the template contains `{{AI_TEXT}}`) to produce tweet text. The text is posted to the developer's own X account via OAuth 2.0 PKCE, optionally quoting a pinned "OG" tweet, and the resulting tweet ID is persisted. The Stage-2 changelog generation runs through a rate-limited, retrying, restart-survivable queue backed by SQLite (sql.js); note that the Stage-1 diff analysis calls Gemini directly and is **not** queued (a known weakness — see Failure modes). The whole thing is a single Node/Express process serving a React/Vite SPA from `frontend/dist`.
+GitLogs turns a `git push` into a published changelog tweet. A developer signs in with GitHub, picks a repository, and GitLogs installs a `push` webhook on it. From then on, every push fires `POST /webhook/github`; the backend verifies the GitHub HMAC signature, resolves which user owns the repo, and for each non-merge commit runs a two-stage AI pipeline — Stage 1 fetches the real commit diff from the GitHub REST API and asks Gemini to summarize it factually; Stage 2 feeds that grounded summary into the user's prompt template (AI-expanded only if the template contains `{{AI_TEXT}}`) to produce tweet text. The text is posted to the developer's own X account via OAuth 2.0 PKCE, optionally quoting a pinned "OG" tweet, and the resulting tweet ID is persisted. The Stage-2 changelog generation runs through a rate-limited, retrying, restart-survivable queue backed by SQLite (sql.js); note that the Stage-1 diff analysis calls Gemini directly and is **not** queued (a known weakness — see Failure modes). Production is split: Vercel serves the React/Vite SPA, and a Node/Express process serves the API, OAuth callbacks, webhooks, and persistence. For local single-process runs, Express can still serve `frontend/dist`.
 
 ---
 
@@ -26,7 +26,7 @@ GitLogs turns a `git push` into a published changelog tweet. A developer signs i
 | `commitFormatter.js`, `templateEngine.js`, `repoIndexer.js` | Supporting: commit→tweet text formatting and Twitter-length math; prompt-template resolution and `{{AI_TEXT}}` handling; repo-context generation from webhook payload (no local clone). |
 
 ### Frontend
-React 18 + Vite 5 SPA under `frontend/`, built to `frontend/dist` and served by the backend via `express.static` in production (`server.js:18-21`, SPA fallback at `:1094`). Talks to the backend through `VITE_API_BASE`; auth state rides on the `httpOnly` `github_user_id` cookie.
+React 18 + Vite 5 SPA under `frontend/`, built to `frontend/dist` and served by Vercel in production. The root `vercel.json` builds only the frontend package and rewrites SPA deep-links to `index.html`. The backend still has `express.static` wiring (`server.js:18-21`, SPA fallback at `:1094`) for local single-process runs. The SPA talks to the backend through `VITE_API_BASE`; auth state rides on the `httpOnly` `github_user_id` cookie.
 
 ### External services
 - **GitHub API** (`api.github.com`) — OAuth, repo listing, webhook management, and per-commit diff fetch.

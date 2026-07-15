@@ -11,6 +11,7 @@ Thumbs.db
 **/.playwright-mcp/
 .vscode/
 .idea/
+.vercel/
 .worktrees/
 pnpm-lock.yaml
 yarn.lock
@@ -18,3 +19,4 @@ yarn.lock
 /frontend/dist
 /frontend/gitlogs-website-design
 /frontend/node_modules
+.env.local

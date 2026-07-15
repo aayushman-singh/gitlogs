@@ -79,7 +79,7 @@ ALLOWED_REPOS=                          # empty = accept all enabled repos
 
 ---
 
-## 3. One-command server bring-up (EC2 / any Node host)
+## 3. One-command local bring-up (single Node host)
 
 ```bash
 git clone https://github.com/aayushman-singh/git-twitter-bot.git ~/gitlogs
@@ -91,8 +91,9 @@ VITE_API_BASE=https://<your-api-domain> npm --prefix frontend run build
 node src/server.js     # or via systemd, below
 ```
 
-The backend serves the built SPA from `frontend/dist` and exposes the API +
-`/webhook/github` on `PORT`.
+This single-process mode serves the built SPA from `frontend/dist` and exposes
+the API + `/webhook/github` on `PORT`. Production splits those responsibilities:
+Vercel serves the SPA, and EC2 serves only the backend/API.
 
 ### systemd unit (template)
 
@@ -124,10 +125,11 @@ sudo systemctl status gitlogs
 
 ---
 
-## 4. Continuous deploy (GitHub Actions → EC2)
+## 4. Backend deploy (GitHub Actions → EC2)
 
 `.github/workflows/deploy-ec2.yml` SSHes in on push to `main`, pulls, installs
-from the frozen npm lockfiles, **builds the frontend**, and restarts the service.
+backend dependencies from the frozen npm lockfile, and restarts the API service.
+It does not build or serve the production SPA; Vercel owns frontend deploys.
 
 Required repo **Actions secrets** (Settings → Secrets and variables → Actions):
 
@@ -138,58 +140,55 @@ Required repo **Actions secrets** (Settings → Secrets and variables → Action
 | `EC2_SSH_KEY` | private key authorized on the host |
 | `EC2_PORT` | ssh port (optional, defaults to 22) |
 
-Set **`VITE_API_BASE`** as a repo **Actions variable** (Settings → Secrets and
-variables → Actions → Variables), or set `API_BASE_URL` in `~/gitlogs/.env` on
-the EC2 host. The SPA is built against that origin. There is no hardcoded
-default; the deploy **fails loudly** if both are unset.
-
-> **Known tradeoff (codex review):** the workflow currently builds on the prod
-> host. For a hardened setup, build the SPA artifact in CI and ship only
-> `frontend/dist` to the host, so prod carries no dev/build toolchain. Tracked
-> as a follow-up; the current approach is fine for a single small instance.
+Set API runtime configuration in `~/gitlogs/.env` on the EC2 host. Keep
+`FRONTEND_URL` pointed at the Vercel production frontend so OAuth redirects and
+CORS line up with the browser origin.
 
 ---
 
-## 5. DNS
+## 5. Frontend deploy (Vercel)
 
-The historical hosts `gitlogs.aayushman.dev` / `api-gitlogs.aayushman.dev` are
-NXDOMAIN. Point:
+Vercel owns the production SPA. Import this GitHub repo into Vercel from the
+repo root; the root `vercel.json` builds only `frontend/` and publishes
+`frontend/dist`.
 
-- `<your-frontend-domain>` → the host (or the static SPA deploy).
+- Build command: `npm --prefix frontend run build`
+- Install command: `npm --prefix frontend ci`
+- Output dir: `frontend/dist`
+- Env: `VITE_API_BASE = https://<your-api-domain>`
+
+`vercel.json` also provides the SPA rewrite so `/demo`, `/dashboard`, and OAuth
+callback deep-links serve `index.html`.
+
+After the first successful Vercel deploy, point `gitlogs.aayushman.dev` at the
+Vercel project and set the backend `FRONTEND_URL` to that same origin.
+
+---
+
+## 6. DNS
+
+Point:
+
+- `<your-frontend-domain>` → the Vercel project.
 - `<your-api-domain>` → the EC2 instance running the backend.
 
 Update the GitHub + X OAuth callback URLs and `.env` to match.
 
 ---
 
-## 6. Keyless demo deploy (Vercel / Cloudflare Pages)
+## 7. Keyless demo deploy
 
 The `/demo` route is fully client-side (no backend, no keys) — ideal for a
 static host. Because `frontend/src/utils/api.js` fails loudly in production
 builds when `VITE_API_BASE` is unset, pass a value at build time even though the
 demo never calls it.
 
-**Vercel** (root directory = `frontend/`):
-- Build command: `npm run build`
-- Output dir: `dist`
-- Env: `VITE_API_BASE = https://<your-api-domain>` (or any placeholder)
-- `frontend/vercel.json` already provides the SPA rewrite so `/demo` deep-links.
-
-```bash
-# from the frontend/ directory, with the Vercel CLI authenticated:
-VITE_API_BASE=https://gitlogs.example npm run build
-npx vercel deploy --prebuilt --prod   # or `npx vercel` and follow prompts
-```
-
-**Cloudflare Pages**:
-- Build command: `npm run build`  · Output: `frontend/dist`  · Root: `frontend`
-- Or direct upload: `npx wrangler pages deploy frontend/dist`
-
-After deploying, update the **Demo** badge/link in `README.md` with the live URL.
+The normal Vercel production frontend already serves `/demo`; no separate demo
+host is required.
 
 ---
 
-## 7. Verify a deploy
+## 8. Verify a deploy
 
 ```bash
 curl -s https://<your-api-domain>/api/health        # → 200 JSON
