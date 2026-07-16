@@ -62,9 +62,20 @@ describe('frontend offline contract', () => {
     const app = fs.readFileSync(frontendAppPath, 'utf8');
     const dashboardHeader = fs.readFileSync(dashboardHeaderPath, 'utf8');
 
-    expect(app).toContain('hideGlobalChrome');
+    expect(app).toContain("const hideGlobalChrome = location.pathname === '/dashboard';");
+    expect(app).toContain('{!hideGlobalChrome && <Header />}');
+    expect(app).toContain('{!hideGlobalChrome && <Footer />}');
     expect(dashboardHeader).toContain('dashboard');
     expect(dashboardHeader).toContain('Customisation');
+  });
+
+  it('does not hide customisation template load failures behind empty defaults', () => {
+    const customisation = fs.readFileSync(
+      path.join(repoRoot, 'frontend', 'src', 'components', 'Customisation.jsx'),
+      'utf8'
+    );
+
+    expect(customisation).not.toContain("return { templates: [], activeTemplateId: 'default' };");
   });
 
   it('surfaces invalid OG input through dashboard action errors instead of throwing', () => {

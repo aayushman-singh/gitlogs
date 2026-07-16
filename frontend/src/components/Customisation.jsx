@@ -750,12 +750,10 @@ export default function Customisation({ user, xConnected }) {
   const loadTemplates = async () => {
     setLoading(true);
     try {
-      const templatesData = await getMyTemplates().catch(err => {
-        console.error('Failed to load user templates:', err);
-        // Return empty object if templates endpoint fails
-        return { templates: [], activeTemplateId: 'default' };
-      });
-      
+      const templatesData = await getMyTemplates();
+      if (!Array.isArray(templatesData.templates)) {
+        throw new Error('Templates response is missing templates array');
+      }
       setCustomTemplates(templatesData.templates || []);
       setActiveTemplateId(templatesData.activeTemplateId || 'default');
     } catch (err) {
@@ -765,7 +763,6 @@ export default function Customisation({ user, xConnected }) {
       setLoading(false);
     }
   };
-
   const handleSelectTemplate = async (templateId) => {
     try {
       await setActiveTemplate(templateId);
