@@ -301,6 +301,47 @@ function getAll(sql, params = []) {
   }
 }
 
+/**
+ * Dashboard-only query helpers: fail closed on DB/SQL errors.
+ * Unrelated callers keep getOne/getAll swallow behavior.
+ */
+function queryOneStrict(sql, params = [], context = 'query') {
+  if (!ensureDb()) {
+    throw new Error(`${context}: database is not ready`);
+  }
+  try {
+    const stmt = db.prepare(sql);
+    stmt.bind(params);
+    if (stmt.step()) {
+      const row = stmt.getAsObject();
+      stmt.free();
+      return row;
+    }
+    stmt.free();
+    return null;
+  } catch (error) {
+    throw new Error(`${context}: ${error.message}`);
+  }
+}
+
+function queryAllStrict(sql, params = [], context = 'query') {
+  if (!ensureDb()) {
+    throw new Error(`${context}: database is not ready`);
+  }
+  try {
+    const stmt = db.prepare(sql);
+    stmt.bind(params);
+    const results = [];
+    while (stmt.step()) {
+      results.push(stmt.getAsObject());
+    }
+    stmt.free();
+    return results;
+  } catch (error) {
+    throw new Error(`${context}: ${error.message}`);
+  }
+}
+
 // Helper to run a statement
 function run(sql, params = []) {
   if (!ensureDb()) return false;
@@ -400,9 +441,6 @@ async function saveTweetRecord(record) {
 }
 
 function getRecentTweetsForUser(userId, limit = 8) {
-  if (!ensureDb()) {
-    throw new Error(`getRecentTweetsForUser: database is not ready for user ${userId}`);
-  }
   if (!userId) {
     throw new Error('getRecentTweetsForUser: userId is required');
   }
@@ -410,30 +448,62 @@ function getRecentTweetsForUser(userId, limit = 8) {
   if (!Number.isInteger(safeLimit) || safeLimit < 1 || safeLimit > 50) {
     throw new Error(`getRecentTweetsForUser: limit must be an integer from 1 to 50, got ${limit}`);
   }
-  return getAll(
+  return queryAllStrict(
     `SELECT user_id, repo_name, commit_sha, tweet_id, tweet_text, status, author, created_at
      FROM tweets
      WHERE user_id = ?
      ORDER BY created_at DESC
      LIMIT ${safeLimit}`,
-    [userId]
+    [userId],
+    `getRecentTweetsForUser for ${userId}`
   );
 }
 
 function getTweetCountForUserSince(userId, sinceIso) {
-  if (!ensureDb()) {
-    throw new Error(`getTweetCountForUserSince: database is not ready for user ${userId}`);
-  }
   if (!userId || !sinceIso) {
     throw new Error('getTweetCountForUserSince: userId and sinceIso are required');
   }
-  const row = getOne(
+  const row = queryOneStrict(
     `SELECT COUNT(*) as count
      FROM tweets
      WHERE user_id = ? AND created_at >= ?`,
-    [userId, sinceIso]
+    [userId, sinceIso],
+    `getTweetCountForUserSince for ${userId}`
   );
-  return row?.count || 0;
+  if (!row || row.count == null) {
+    throw new Error(`getTweetCountForUserSince for ${userId}: COUNT query returned no row`);
+  }
+  return Number(row.count);
+}
+
+/**
+ * Dashboard OG read: missing row is null; DB/SQL failure throws.
+ */
+function getOgPostForDashboard(repoName) {
+  if (!repoName) {
+    throw new Error('getOgPostForDashboard: repoName is required');
+  }
+  const row = queryOneStrict(
+    'SELECT tweet_id FROM og_posts WHERE repo_name = ?',
+    [repoName],
+    `getOgPostForDashboard for ${repoName}`
+  );
+  return row ? row.tweet_id : null;
+}
+
+/**
+ * Dashboard repo status: missing row is null (not enabled); DB/SQL failure throws.
+ */
+function getRepoStatusForDashboard(userId, repoFullName) {
+  if (!userId || !repoFullName) {
+    throw new Error('getRepoStatusForDashboard: userId and repoFullName are required');
+  }
+  const row = queryOneStrict(
+    'SELECT is_active FROM user_repos WHERE user_id = ? AND repo_full_name = ?',
+    [userId, repoFullName],
+    `getRepoStatusForDashboard for ${userId}/${repoFullName}`
+  );
+  return row ? { enabled: row.is_active === 1 } : null;
 }
 
 // ============================================
@@ -1194,7 +1264,7 @@ function cleanupOldQueueItems() {
 }
 
 /**
- * Get queue statistics
+ * Get queue statistics (system-wide; admin/ops)
  */
 function getQueueItemStats() {
   if (!ensureDb()) return null;
@@ -1209,6 +1279,34 @@ function getQueueItemStats() {
     processing: processing?.count || 0,
     retrying: retrying?.count || 0,
     failed: failed?.count || 0
+  };
+}
+
+/**
+ * Dashboard queue stats scoped to one user. Throws on DB/SQL failure.
+ */
+function getQueueItemStatsForUser(userId) {
+  if (!userId) {
+    throw new Error('getQueueItemStatsForUser: userId is required');
+  }
+
+  const countForStatus = (status) => {
+    const row = queryOneStrict(
+      'SELECT COUNT(*) as count FROM queue_items WHERE user_id = ? AND status = ?',
+      [userId, status],
+      `getQueueItemStatsForUser ${status} for ${userId}`
+    );
+    if (!row || row.count == null) {
+      throw new Error(`getQueueItemStatsForUser ${status} for ${userId}: COUNT query returned no row`);
+    }
+    return Number(row.count);
+  };
+
+  return {
+    pending: countForStatus('pending'),
+    processing: countForStatus('processing'),
+    retrying: countForStatus('retrying'),
+    failed: countForStatus('failed'),
   };
 }
 
@@ -1237,6 +1335,9 @@ module.exports = {
   getTweetsForRepo,
   getRecentTweetsForUser,
   getTweetCountForUserSince,
+  getOgPostForDashboard,
+  getRepoStatusForDashboard,
+  getQueueItemStatsForUser,
   
   // OG post functions
   setOgPost,

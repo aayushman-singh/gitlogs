@@ -61,12 +61,15 @@ describe('frontend offline contract', () => {
   it('uses dashboard-specific chrome on /dashboard', () => {
     const app = fs.readFileSync(frontendAppPath, 'utf8');
     const dashboardHeader = fs.readFileSync(dashboardHeaderPath, 'utf8');
+    const dashboard = fs.readFileSync(userDashboardPath, 'utf8');
 
     expect(app).toContain("const hideGlobalChrome = location.pathname === '/dashboard';");
     expect(app).toContain('{!hideGlobalChrome && <Header />}');
     expect(app).toContain('{!hideGlobalChrome && <Footer />}');
     expect(dashboardHeader).toContain('dashboard');
     expect(dashboardHeader).toContain('Customisation');
+    expect(dashboard).toContain('UnauthenticatedDashboardChrome');
+    expect(dashboard).toContain('dashboard-shell-header');
   });
 
   it('does not hide customisation template load failures behind empty defaults', () => {
@@ -76,6 +79,9 @@ describe('frontend offline contract', () => {
     );
 
     expect(customisation).not.toContain("return { templates: [], activeTemplateId: 'default' };");
+    expect(customisation).toContain("setResult({ type: 'error', message: err.message || 'Failed to load post settings' })");
+    expect(customisation).toContain("setResult({ type: 'error', message: err.message || 'Failed to load X user info' })");
+    expect(customisation).toContain("result.type !== 'error'");
   });
 
   it('surfaces invalid OG input through dashboard action errors instead of throwing', () => {
@@ -94,7 +100,7 @@ describe('frontend offline contract', () => {
 
     expect(stats).not.toContain('stats.queue ||');
     expect(stats).toContain('Queue metrics are unavailable.');
-    expect(stats).toContain('<QueueValue queue={stats.queue} />');
+    expect(stats).toContain('<QueueValue queue={stats.queue} queueError={queueError} />');
   });
 
   it('constrains the dashboard logo so the 60px header is not overflowed', () => {
@@ -115,9 +121,31 @@ describe('frontend offline contract', () => {
     expect(stats).toContain('queue.failed');
     expect(stats).toContain('All clear');
     expect(stats).toContain('Queue metrics are unavailable.');
+    expect(stats).toContain('queue.pending + queue.processing + queue.retrying + queue.failed');
     expect(stats).not.toMatch(
       /queue\.failed\s*>\s*0\s*\?\s*[`'"]\$\{queue\.failed\} failed[`'"]\s*:\s*[`'"]All clear[`'"]/
     );
+  });
+
+  it('renders dashboard section errors for queue, connections, and recent posts', () => {
+    const dashboard = fs.readFileSync(userDashboardPath, 'utf8');
+    const stats = fs.readFileSync(dashboardStatsPath, 'utf8');
+    const connections = fs.readFileSync(
+      path.join(repoRoot, 'frontend', 'src', 'components', 'dashboard', 'ConnectionsPanel.jsx'),
+      'utf8'
+    );
+    const recent = fs.readFileSync(
+      path.join(repoRoot, 'frontend', 'src', 'components', 'dashboard', 'RecentPostsPanel.jsx'),
+      'utf8'
+    );
+    const api = fs.readFileSync(path.join(repoRoot, 'frontend', 'src', 'utils', 'api.js'), 'utf8');
+
+    expect(dashboard).toContain('errors={sectionErrors}');
+    expect(stats).toContain("sectionError(errors, 'queue')");
+    expect(connections).toContain("entry.section === 'connections.x'");
+    expect(recent).toContain("entry.section === 'recentPosts'");
+    expect(api).toContain('data.message || data.error');
+    expect(api).not.toContain('data.error || data.message');
   });
 
   it('uses --danger for dashboard error alerts', () => {

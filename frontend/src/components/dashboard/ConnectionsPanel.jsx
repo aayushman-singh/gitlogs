@@ -1,6 +1,11 @@
 import { getBackendUrl } from '../../utils/api';
 
-export default function ConnectionsPanel({ connections, onDisconnectX }) {
+export default function ConnectionsPanel({ connections, errors = [], onDisconnectX }) {
+  const xError = Array.isArray(errors)
+    ? errors.find((entry) => entry.section === 'connections.x')
+    : null;
+  const connectionError = connections?.x?.error || xError?.message || null;
+
   return (
     <section className="dashboard-panel">
       <div className="dashboard-panel-heading">
@@ -9,6 +14,10 @@ export default function ConnectionsPanel({ connections, onDisconnectX }) {
           <p>Accounts GitLogs can read or post with</p>
         </div>
       </div>
+
+      {connectionError && (
+        <p className="dashboard-section-error" role="alert">{connectionError}</p>
+      )}
 
       <div className="dashboard-connection-list">
         <article className="dashboard-connection-row">
@@ -22,7 +31,11 @@ export default function ConnectionsPanel({ connections, onDisconnectX }) {
         <article className="dashboard-connection-row">
           <div>
             <strong>X</strong>
-            <span>{connections.x.connected ? `@${connections.x.username || 'connected'}` : 'Not connected'}</span>
+            <span>
+              {connections.x.connected
+                ? (connections.x.username ? `@${connections.x.username}` : 'Connected')
+                : 'Not connected'}
+            </span>
           </div>
           {connections.x.connected ? (
             <button type="button" onClick={onDisconnectX}>Disconnect</button>

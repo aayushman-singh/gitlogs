@@ -63,7 +63,7 @@ export async function adminApiCall(endpoint, options = {}) {
   }
   
   if (!response.ok) {
-    throw new Error(data.error || data.message || `HTTP ${response.status}: ${response.statusText}`);
+    throw new Error(data.message || data.error || `HTTP ${response.status}: ${response.statusText}`);
   }
   
   return data;
@@ -100,7 +100,7 @@ export async function apiCall(endpoint, options = {}) {
   }
   
   if (!response.ok) {
-    throw new Error(data.error || data.message || `HTTP ${response.status}: ${response.statusText}`);
+    throw new Error(data.message || data.error || `HTTP ${response.status}: ${response.statusText}`);
   }
   
   return data;

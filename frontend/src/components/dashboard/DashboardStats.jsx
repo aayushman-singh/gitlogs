@@ -1,3 +1,8 @@
+function sectionError(errors, section) {
+  if (!Array.isArray(errors)) return null;
+  return errors.find((entry) => entry.section === section) || null;
+}
+
 function EngagementValue({ engagement }) {
   if (!engagement || engagement.status !== 'available') {
     return (
@@ -16,7 +21,16 @@ function EngagementValue({ engagement }) {
   );
 }
 
-function QueueValue({ queue }) {
+function QueueValue({ queue, queueError }) {
+  if (queueError) {
+    return (
+      <>
+        <strong>Unavailable</strong>
+        <small>{queueError.message}</small>
+      </>
+    );
+  }
+
   if (!queue) {
     return (
       <>
@@ -26,7 +40,7 @@ function QueueValue({ queue }) {
     );
   }
 
-  const queueTotal = queue.pending + queue.processing + queue.retrying;
+  const queueTotal = queue.pending + queue.processing + queue.retrying + queue.failed;
   const queueParts = [];
   if (queue.pending > 0) queueParts.push(`${queue.pending} pending`);
   if (queue.processing > 0) queueParts.push(`${queue.processing} processing`);
@@ -41,7 +55,9 @@ function QueueValue({ queue }) {
   );
 }
 
-export default function DashboardStats({ stats }) {
+export default function DashboardStats({ stats, errors = [] }) {
+  const queueError = sectionError(errors, 'queue');
+
   return (
     <section className="dashboard-stats" aria-label="Dashboard summary">
       <article className="dashboard-stat-card">
@@ -56,7 +72,7 @@ export default function DashboardStats({ stats }) {
       </article>
       <article className="dashboard-stat-card">
         <span>Queue</span>
-        <QueueValue queue={stats.queue} />
+        <QueueValue queue={stats.queue} queueError={queueError} />
       </article>
       <article className="dashboard-stat-card">
         <span>Avg engagement</span>

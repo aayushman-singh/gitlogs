@@ -713,6 +713,7 @@ export default function Customisation({ user, xConnected }) {
         }
       } catch (err) {
         console.error('Failed to load X user info:', err);
+        setResult({ type: 'error', message: err.message || 'Failed to load X user info' });
       }
     }
   };
@@ -730,7 +731,7 @@ export default function Customisation({ user, xConnected }) {
       }
     } catch (err) {
       console.error('Failed to load post settings:', err);
-      // Use defaults if API fails
+      setResult({ type: 'error', message: err.message || 'Failed to load post settings' });
     }
   };
 
@@ -754,11 +755,12 @@ export default function Customisation({ user, xConnected }) {
       if (!Array.isArray(templatesData.templates)) {
         throw new Error('Templates response is missing templates array');
       }
-      setCustomTemplates(templatesData.templates || []);
+      setCustomTemplates(templatesData.templates);
       setActiveTemplateId(templatesData.activeTemplateId || 'default');
+      setResult({ type: '', message: '' });
     } catch (err) {
       console.error('Failed to load templates:', err);
-      setResult({ type: 'error', message: 'Failed to load templates' });
+      setResult({ type: 'error', message: err.message || 'Failed to load templates' });
     } finally {
       setLoading(false);
     }
@@ -887,7 +889,7 @@ export default function Customisation({ user, xConnected }) {
           </>
         )}
 
-        {customTemplates.filter(t => !presets.find(p => p.id === t.id)).length === 0 && (
+        {result.type !== 'error' && customTemplates.filter(t => !presets.find(p => p.id === t.id)).length === 0 && (
           <div className="empty-state" style={{ padding: '24px', marginTop: 16 }}>
             <p className="text-muted">
               No custom templates yet. Click "Create Custom" to make your own!

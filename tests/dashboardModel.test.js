@@ -19,10 +19,10 @@ function createDeps(overrides = {}) {
     }),
     getXOAuthUserId: vi.fn().mockReturnValue(userId),
     isOAuthTokenValid: vi.fn().mockReturnValue(true),
-    getOgPost: vi.fn().mockImplementation(async (repoFullName) => (
+    getOgPostForDashboard: vi.fn().mockImplementation((repoFullName) => (
       repoFullName === 'aayushman-singh/gitlogs' ? '1800000000000000000' : null
     )),
-    getRepoStatus: vi.fn().mockImplementation((ownerUserId, repoFullName) => (
+    getRepoStatusForDashboard: vi.fn().mockImplementation((ownerUserId, repoFullName) => (
       ownerUserId === userId && repoFullName === 'aayushman-singh/gitlogs'
         ? { enabled: true }
         : null
@@ -39,11 +39,14 @@ function createDeps(overrides = {}) {
       },
     ]),
     getTweetCountForUserSince: vi.fn().mockReturnValue(3),
-    getQueueItemStats: vi.fn().mockReturnValue({
-      pending: 1,
-      processing: 0,
-      retrying: 0,
-      failed: 0,
+    getQueueItemStatsForUser: vi.fn().mockImplementation((scopedUserId) => {
+      expect(scopedUserId).toBe(userId);
+      return {
+        pending: 1,
+        processing: 0,
+        retrying: 0,
+        failed: 0,
+      };
     }),
   };
 
@@ -133,6 +136,8 @@ describe('buildDashboardModel', () => {
       repo_name: 'aayushman-singh/gitlogs',
       tweet_id: '1900000000000000000',
     });
+    expect(model.errors).toEqual([]);
+    expect(deps.database.getQueueItemStatsForUser).toHaveBeenCalledWith(userId);
   });
 
   it('fails loudly when no valid GitHub token is available', async () => {
@@ -159,5 +164,80 @@ describe('buildDashboardModel', () => {
     await expect(buildDashboardModel({ githubUserId, deps })).rejects.toThrow(
       'dashboard: failed to read repositories for github user 42: GitHub API unavailable'
     );
+  });
+
+  it('fails loudly when recent posts DB reads fail', async () => {
+    const deps = createDeps();
+    deps.database.getRecentTweetsForUser = vi.fn().mockImplementation(() => {
+      throw new Error('getRecentTweetsForUser for github:42: SQL boom');
+    });
+
+    await expect(buildDashboardModel({ githubUserId, deps })).rejects.toThrow(
+      'dashboard: failed to read recent posts for github:42'
+    );
+  });
+
+  it('fails loudly when repository enrichment DB reads fail', async () => {
+    const deps = createDeps();
+    deps.database.getOgPostForDashboard = vi.fn().mockImplementation(() => {
+      throw new Error('getOgPostForDashboard for aayushman-singh/gitlogs: SQL boom');
+    });
+
+    await expect(buildDashboardModel({ githubUserId, deps })).rejects.toThrow(
+      'dashboard: failed to enrich repositories for github user 42'
+    );
+  });
+
+  it('returns a queue section error when user queue stats fail', async () => {
+    const deps = createDeps();
+    deps.database.getQueueItemStatsForUser = vi.fn().mockImplementation(() => {
+      throw new Error('getQueueItemStatsForUser pending for github:42: SQL boom');
+    });
+
+    const model = await buildDashboardModel({ githubUserId, deps });
+
+    expect(model.stats.queue).toBeNull();
+    expect(model.errors).toEqual([
+      expect.objectContaining({
+        section: 'queue',
+        message: expect.stringContaining('Failed to read queue status for github:42'),
+      }),
+    ]);
+    expect(model.repositories).toHaveLength(2);
+  });
+
+  it('keeps X connected with a connections.x section error when profile read fails', async () => {
+    const deps = createDeps({
+      getXUserInfo: vi.fn().mockRejectedValue(new Error('X API timeout')),
+    });
+
+    const model = await buildDashboardModel({ githubUserId, deps });
+
+    expect(model.connections.x).toMatchObject({
+      connected: true,
+      userId,
+      username: null,
+      error: expect.stringContaining('Failed to load X profile'),
+    });
+    expect(model.errors).toEqual([
+      expect.objectContaining({
+        section: 'connections.x',
+        message: expect.stringContaining('X API timeout'),
+      }),
+    ]);
+    expect(model.stats.postsThisWeek).toBe(3);
+  });
+
+  it('treats null X profile as a connections.x section error when connected', async () => {
+    const deps = createDeps({
+      getXUserInfo: vi.fn().mockResolvedValue(null),
+    });
+
+    const model = await buildDashboardModel({ githubUserId, deps });
+
+    expect(model.connections.x.connected).toBe(true);
+    expect(model.errors).toEqual([
+      expect.objectContaining({ section: 'connections.x' }),
+    ]);
   });
 });

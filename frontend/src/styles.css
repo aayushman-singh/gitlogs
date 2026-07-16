@@ -3050,6 +3050,16 @@ code {
   color: var(--text-secondary);
 }
 
+.dashboard-section-error {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  font-size: 0.9rem;
+}
+
 .dashboard-stat-card strong {
   font-size: 26px;
   letter-spacing: 0;

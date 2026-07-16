@@ -16,6 +16,33 @@ import ConnectionsPanel from '../components/dashboard/ConnectionsPanel';
 import RecentPostsPanel from '../components/dashboard/RecentPostsPanel';
 import logo from '../../gitlogs.png';
 
+function UnauthenticatedDashboardChrome({ theme, onToggleTheme, onLogin }) {
+  const isDark = theme === 'dark';
+
+  return (
+    <header className="dashboard-shell-header">
+      <div className="dashboard-brand">
+        <img src={logo} alt="GitLogs logo" className="dashboard-logo" />
+        <span className="dashboard-badge">dashboard</span>
+      </div>
+      <div className="dashboard-header-actions">
+        <button
+          type="button"
+          className="dashboard-icon-button"
+          onClick={onToggleTheme}
+          aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+          title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+        >
+          {isDark ? 'Light' : 'Dark'}
+        </button>
+        <button type="button" className="dashboard-nav-button" onClick={onLogin}>
+          Sign in
+        </button>
+      </div>
+    </header>
+  );
+}
+
 export default function UserDashboard() {
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -32,7 +59,7 @@ export default function UserDashboard() {
       const data = await getMyDashboard();
       setDashboard(data);
     } catch (error) {
-      if (error.message.includes('Not authenticated') || error.message.includes('not_authenticated')) {
+      if (error.message.includes('Not authenticated') || error.message.includes('not_authenticated') || error.message.includes('Please sign in')) {
         setDashboard(null);
       } else {
         setLoadError(error.message);
@@ -106,14 +133,21 @@ export default function UserDashboard() {
 
   if (!dashboard && !loadError) {
     return (
-      <div className="container">
-        <div className="card login-card">
-          <img src={logo} alt="GitLogs logo" className="logo-mark logo-mark-lg" />
-          <h1>Connect your GitHub</h1>
-          <p>Login with GitHub to manage repositories, posting, and customisation.</p>
-          <button onClick={handleGitHubLogin} className="btn btn-github" style={{ width: '100%', marginBottom: 16 }}>
-            Continue with GitHub
-          </button>
+      <div className="dashboard-page">
+        <UnauthenticatedDashboardChrome
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          onLogin={handleGitHubLogin}
+        />
+        <div className="container">
+          <div className="card login-card">
+            <img src={logo} alt="GitLogs logo" className="logo-mark logo-mark-lg" />
+            <h1>Connect your GitHub</h1>
+            <p>Login with GitHub to manage repositories, posting, and customisation.</p>
+            <button onClick={handleGitHubLogin} className="btn btn-github" style={{ width: '100%', marginBottom: 16 }}>
+              Continue with GitHub
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -130,6 +164,8 @@ export default function UserDashboard() {
       </div>
     );
   }
+
+  const sectionErrors = Array.isArray(dashboard.errors) ? dashboard.errors : [];
 
   return (
     <div className="dashboard-page">
@@ -152,7 +188,7 @@ export default function UserDashboard() {
         </main>
       ) : (
         <main className="dashboard-content">
-          <DashboardStats stats={dashboard.stats} />
+          <DashboardStats stats={dashboard.stats} errors={sectionErrors} />
           <div className="dashboard-grid">
             <RepositoryPanel
               repositories={dashboard.repositories}
@@ -160,8 +196,12 @@ export default function UserDashboard() {
               onSetOgPost={handleSetOgPost}
             />
             <aside className="dashboard-rail">
-              <ConnectionsPanel connections={dashboard.connections} onDisconnectX={handleDisconnectX} />
-              <RecentPostsPanel posts={dashboard.recentPosts} />
+              <ConnectionsPanel
+                connections={dashboard.connections}
+                errors={sectionErrors}
+                onDisconnectX={handleDisconnectX}
+              />
+              <RecentPostsPanel posts={dashboard.recentPosts} errors={sectionErrors} />
             </aside>
           </div>
         </main>

@@ -40,20 +40,56 @@ function normalizeRepo(repo, { enabled, ogPostId }) {
   };
 }
 
-async function readXConnection({ database, getXUserInfo, githubUserId }) {
+function pushSectionError(errors, section, message) {
+  errors.push({ section, message });
+}
+
+async function readXConnection({ database, getXUserInfo, githubUserId, errors }) {
   const xOAuthUserId = database.getXOAuthUserId(githubUserId);
   const connected = Boolean(xOAuthUserId && database.isOAuthTokenValid(xOAuthUserId));
   if (!connected) {
-    return { connected: false, userId: xOAuthUserId || null, username: null, name: null, profileImageUrl: null };
+    return {
+      connected: false,
+      userId: xOAuthUserId || null,
+      username: null,
+      name: null,
+      profileImageUrl: null,
+    };
   }
-  const xUserInfo = await getXUserInfo(xOAuthUserId);
-  return {
-    connected: true,
-    userId: xOAuthUserId,
-    username: xUserInfo?.username || null,
-    name: xUserInfo?.name || xUserInfo?.username || null,
-    profileImageUrl: xUserInfo?.profileImageUrl || null,
-  };
+
+  try {
+    const xUserInfo = await getXUserInfo(xOAuthUserId);
+    if (!xUserInfo) {
+      const message = `Failed to load X profile for ${xOAuthUserId}`;
+      pushSectionError(errors, 'connections.x', message);
+      return {
+        connected: true,
+        userId: xOAuthUserId,
+        username: null,
+        name: null,
+        profileImageUrl: null,
+        error: message,
+      };
+    }
+    return {
+      connected: true,
+      userId: xOAuthUserId,
+      username: xUserInfo.username || null,
+      name: xUserInfo.name || xUserInfo.username || null,
+      profileImageUrl: xUserInfo.profileImageUrl || null,
+    };
+  } catch (error) {
+    const message = `Failed to load X profile for ${xOAuthUserId}: ${error.message}`;
+    pushSectionError(errors, 'connections.x', message);
+    return {
+      connected: true,
+      userId: xOAuthUserId,
+      username: null,
+      name: null,
+      profileImageUrl: null,
+      error: message,
+    };
+  }
 }
 
 async function buildDashboardModel({ githubUserId, deps, now = new Date() }) {
@@ -63,6 +99,7 @@ async function buildDashboardModel({ githubUserId, deps, now = new Date() }) {
 
   const { database, githubAuth, getXUserInfo, getXEngagementSummary } = deps;
   const userId = `github:${githubUserId}`;
+  const errors = [];
   const validToken = await githubAuth.getValidAccessToken(githubUserId);
   if (!validToken) {
     throw new Error(`dashboard: no valid GitHub token for github user ${githubUserId}`);
@@ -80,20 +117,54 @@ async function buildDashboardModel({ githubUserId, deps, now = new Date() }) {
     );
   }
 
-  const repositories = await Promise.all(githubRepos.map(async (repo) => {
-    const ogPostId = await database.getOgPost(repo.full_name);
-    const repoStatus = database.getRepoStatus(userId, repo.full_name);
-    return normalizeRepo(repo, {
-      enabled: repoStatus?.enabled || false,
-      ogPostId,
-    });
-  }));
+  const getOgPost = database.getOgPostForDashboard || database.getOgPost;
+  const getRepoStatus = database.getRepoStatusForDashboard || database.getRepoStatus;
+
+  let repositories;
+  try {
+    repositories = await Promise.all(githubRepos.map(async (repo) => {
+      const ogPostId = await Promise.resolve(getOgPost(repo.full_name));
+      const repoStatus = getRepoStatus(userId, repo.full_name);
+      return normalizeRepo(repo, {
+        enabled: Boolean(repoStatus?.enabled),
+        ogPostId,
+      });
+    }));
+  } catch (error) {
+    throw new Error(
+      `dashboard: failed to enrich repositories for github user ${githubUserId}: ${error.message}`
+    );
+  }
 
   const weekStartIso = startOfWeekUtc(now);
-  const recentPosts = database.getRecentTweetsForUser(userId, 8);
-  const postsThisWeek = database.getTweetCountForUserSince(userId, weekStartIso);
-  const queueStats = database.getQueueItemStats();
-  const xConnection = await readXConnection({ database, getXUserInfo, githubUserId });
+
+  let recentPosts;
+  let postsThisWeek;
+  try {
+    recentPosts = database.getRecentTweetsForUser(userId, 8);
+    postsThisWeek = database.getTweetCountForUserSince(userId, weekStartIso);
+  } catch (error) {
+    throw new Error(
+      `dashboard: failed to read recent posts for ${userId}: ${error.message}`
+    );
+  }
+
+  let queueStats = null;
+  try {
+    if (typeof database.getQueueItemStatsForUser !== 'function') {
+      throw new Error('getQueueItemStatsForUser is required');
+    }
+    queueStats = database.getQueueItemStatsForUser(userId);
+  } catch (error) {
+    pushSectionError(
+      errors,
+      'queue',
+      `Failed to read queue status for ${userId}: ${error.message}`
+    );
+    queueStats = null;
+  }
+
+  const xConnection = await readXConnection({ database, getXUserInfo, githubUserId, errors });
   const averageEngagement = await getXEngagementSummary({
     userId,
     xConnection,
@@ -116,7 +187,7 @@ async function buildDashboardModel({ githubUserId, deps, now = new Date() }) {
     },
     repositories,
     recentPosts,
-    errors: [],
+    errors,
   };
 }
 
