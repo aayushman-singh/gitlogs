@@ -97,6 +97,29 @@ describe('frontend offline contract', () => {
     expect(stats).toContain('<QueueValue queue={stats.queue} />');
   });
 
+  it('constrains the dashboard logo so the 60px header is not overflowed', () => {
+    const css = fs.readFileSync(frontendStylesPath, 'utf8');
+
+    expect(css).toMatch(
+      /\.dashboard-logo\s*\{[^}]*max-width:\s*104px[^}]*height:\s*32px[^}]*object-fit:\s*contain/
+    );
+    expect(css).not.toMatch(/\.dashboard-logo\s*\{\s*width:\s*104px;\s*height:\s*auto;\s*\}/);
+  });
+
+  it('reports queue pending/processing/retrying counts instead of a false All clear', () => {
+    const stats = fs.readFileSync(dashboardStatsPath, 'utf8');
+
+    expect(stats).toContain('queue.pending');
+    expect(stats).toContain('queue.processing');
+    expect(stats).toContain('queue.retrying');
+    expect(stats).toContain('queue.failed');
+    expect(stats).toContain('All clear');
+    expect(stats).toContain('Queue metrics are unavailable.');
+    expect(stats).not.toMatch(
+      /queue\.failed\s*>\s*0\s*\?\s*[`'"]\$\{queue\.failed\} failed[`'"]\s*:\s*[`'"]All clear[`'"]/
+    );
+  });
+
   it('uses --danger for dashboard error alerts', () => {
     const css = fs.readFileSync(frontendStylesPath, 'utf8');
 

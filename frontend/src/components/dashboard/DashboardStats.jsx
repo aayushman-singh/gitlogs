@@ -27,11 +27,16 @@ function QueueValue({ queue }) {
   }
 
   const queueTotal = queue.pending + queue.processing + queue.retrying;
+  const queueParts = [];
+  if (queue.pending > 0) queueParts.push(`${queue.pending} pending`);
+  if (queue.processing > 0) queueParts.push(`${queue.processing} processing`);
+  if (queue.retrying > 0) queueParts.push(`${queue.retrying} retrying`);
+  if (queue.failed > 0) queueParts.push(`${queue.failed} failed`);
 
   return (
     <>
       <strong>{queueTotal}</strong>
-      <small>{queue.failed > 0 ? `${queue.failed} failed` : 'All clear'}</small>
+      <small>{queueParts.length > 0 ? queueParts.join(' · ') : 'All clear'}</small>
     </>
   );
 }

@@ -2956,7 +2956,12 @@ code {
 }
 
 .dashboard-brand { gap: 12px; }
-.dashboard-logo { width: 104px; height: auto; }
+.dashboard-logo {
+  max-width: 104px;
+  width: auto;
+  height: 32px;
+  object-fit: contain;
+}
 .dashboard-badge,
 .dashboard-repo-badges span {
   border: 1px solid var(--border);
