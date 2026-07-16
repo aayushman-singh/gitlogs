@@ -3159,7 +3159,7 @@ code {
   padding: 14px 16px;
 }
 
-.dashboard-alert.is-error { border-color: var(--error); }
+.dashboard-alert.is-error { border-color: var(--danger); }
 .dashboard-alert.is-success { border-color: var(--success); }
 .dashboard-error { padding: 28px; }
 

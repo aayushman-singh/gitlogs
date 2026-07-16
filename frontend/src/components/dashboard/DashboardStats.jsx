@@ -16,10 +16,27 @@ function EngagementValue({ engagement }) {
   );
 }
 
-export default function DashboardStats({ stats }) {
-  const queue = stats.queue || { pending: 0, processing: 0, retrying: 0, failed: 0 };
+function QueueValue({ queue }) {
+  if (!queue) {
+    return (
+      <>
+        <strong>Unavailable</strong>
+        <small>Queue metrics are unavailable.</small>
+      </>
+    );
+  }
+
   const queueTotal = queue.pending + queue.processing + queue.retrying;
 
+  return (
+    <>
+      <strong>{queueTotal}</strong>
+      <small>{queue.failed > 0 ? `${queue.failed} failed` : 'All clear'}</small>
+    </>
+  );
+}
+
+export default function DashboardStats({ stats }) {
   return (
     <section className="dashboard-stats" aria-label="Dashboard summary">
       <article className="dashboard-stat-card">
@@ -34,8 +51,7 @@ export default function DashboardStats({ stats }) {
       </article>
       <article className="dashboard-stat-card">
         <span>Queue</span>
-        <strong>{queueTotal}</strong>
-        <small>{queue.failed > 0 ? `${queue.failed} failed` : 'All clear'}</small>
+        <QueueValue queue={stats.queue} />
       </article>
       <article className="dashboard-stat-card">
         <span>Avg engagement</span>

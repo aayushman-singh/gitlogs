@@ -16,6 +16,22 @@ const dashboardHeaderPath = path.join(
   'dashboard',
   'DashboardHeader.jsx'
 );
+const dashboardStatsPath = path.join(
+  repoRoot,
+  'frontend',
+  'src',
+  'components',
+  'dashboard',
+  'DashboardStats.jsx'
+);
+const repositoryPanelPath = path.join(
+  repoRoot,
+  'frontend',
+  'src',
+  'components',
+  'dashboard',
+  'RepositoryPanel.jsx'
+);
 
 describe('frontend offline contract', () => {
   it('keeps global CSS free of external resources so /demo can run offline', () => {
@@ -49,5 +65,31 @@ describe('frontend offline contract', () => {
     expect(app).toContain('hideGlobalChrome');
     expect(dashboardHeader).toContain('dashboard');
     expect(dashboardHeader).toContain('Customisation');
+  });
+
+  it('surfaces invalid OG input through dashboard action errors instead of throwing', () => {
+    const panel = fs.readFileSync(repositoryPanelPath, 'utf8');
+    const dashboard = fs.readFileSync(userDashboardPath, 'utf8');
+
+    expect(panel).not.toContain("throw new Error('Paste a valid X/Twitter status URL or numeric tweet id.')");
+    expect(panel).toContain('await onSetOgPost(repoFullName, tweetId)');
+    expect(dashboard).toContain("throw new Error('Paste a valid X/Twitter status URL or numeric tweet id.')");
+    expect(dashboard).toContain('setActionError(error.message)');
+    expect(dashboard).toContain('return false');
+  });
+
+  it('renders missing queue as unavailable instead of fabricating zeros', () => {
+    const stats = fs.readFileSync(dashboardStatsPath, 'utf8');
+
+    expect(stats).not.toContain('stats.queue ||');
+    expect(stats).toContain('Queue metrics are unavailable.');
+    expect(stats).toContain('<QueueValue queue={stats.queue} />');
+  });
+
+  it('uses --danger for dashboard error alerts', () => {
+    const css = fs.readFileSync(frontendStylesPath, 'utf8');
+
+    expect(css).toMatch(/\.dashboard-alert\.is-error\s*\{\s*border-color:\s*var\(--danger\)/);
+    expect(css).not.toMatch(/\.dashboard-alert\.is-error\s*\{\s*border-color:\s*var\(--error\)/);
   });
 });

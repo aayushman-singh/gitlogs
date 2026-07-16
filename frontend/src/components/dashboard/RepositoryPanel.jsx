@@ -35,12 +35,11 @@ export default function RepositoryPanel({ repositories, onToggleRepo, onSetOgPos
 
   const submitOgPost = async (repoFullName) => {
     const tweetId = extractTweetId(tweetInput);
-    if (!tweetId) {
-      throw new Error('Paste a valid X/Twitter status URL or numeric tweet id.');
+    const ok = await onSetOgPost(repoFullName, tweetId);
+    if (ok) {
+      setEditingRepo(null);
+      setTweetInput('');
     }
-    await onSetOgPost(repoFullName, tweetId);
-    setEditingRepo(null);
-    setTweetInput('');
   };
 
   return (

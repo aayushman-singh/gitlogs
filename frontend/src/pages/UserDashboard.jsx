@@ -64,8 +64,10 @@ export default function UserDashboard() {
       await operation();
       setActionMessage(successMessage);
       await loadDashboard();
+      return true;
     } catch (error) {
       setActionError(error.message);
+      return false;
     }
   };
 
@@ -75,7 +77,12 @@ export default function UserDashboard() {
   );
 
   const handleSetOgPost = (repoFullName, tweetId) => runAction(
-    () => setMyRepoOgPost(repoFullName, tweetId),
+    async () => {
+      if (!tweetId) {
+        throw new Error('Paste a valid X/Twitter status URL or numeric tweet id.');
+      }
+      await setMyRepoOgPost(repoFullName, tweetId);
+    },
     `Updated OG post for ${repoFullName}`
   );
 
