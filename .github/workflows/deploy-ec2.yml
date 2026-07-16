@@ -19,8 +19,22 @@ jobs:
           port: ${{ secrets.EC2_PORT || 22 }}
           script: |
             set -euo pipefail
-            cd ~/gitlogs
-            git pull --ff-only
+            DEPLOY_DIR="${GITLOGS_DEPLOY_DIR:-$HOME/gitlogs}"
+            REPO_URL="https://github.com/aayushman-singh/gitlogs.git"
+
+            if [ ! -d "$DEPLOY_DIR" ]; then
+              git clone "$REPO_URL" "$DEPLOY_DIR"
+            fi
+            if [ ! -d "$DEPLOY_DIR/.git" ]; then
+              echo "$DEPLOY_DIR exists but is not a git checkout." >&2
+              exit 1
+            fi
+
+            cd "$DEPLOY_DIR"
+            git remote set-url origin "$REPO_URL"
+            git fetch origin main
+            git checkout main
+            git pull --ff-only origin main
             npm ci
             test -f src/server.js
             grep -q "/api/me/dashboard" src/server.js
@@ -29,6 +43,26 @@ jobs:
             NODE_BIN="$(command -v node)"
             PORT="$(grep -E '^PORT=' .env 2>/dev/null | tail -n 1 | cut -d= -f2- || true)"
             PORT="${PORT:-3000}"
+
+            {
+              echo "[Unit]"
+              echo "Description=Gitlogs"
+              echo "After=network.target"
+              echo
+              echo "[Service]"
+              echo "Type=simple"
+              echo "User=$(id -un)"
+              echo "WorkingDirectory=${DEPLOY_DIR}"
+              echo "Environment=NODE_ENV=production"
+              echo "Environment=PORT=${PORT}"
+              echo "EnvironmentFile=-${DEPLOY_DIR}/.env"
+              echo "ExecStart=${NODE_BIN} src/server.js"
+              echo "Restart=always"
+              echo "RestartSec=10"
+              echo
+              echo "[Install]"
+              echo "WantedBy=multi-user.target"
+            } | sudo tee /etc/systemd/system/gitlogs.service >/dev/null
 
             sudo mkdir -p /etc/systemd/system/gitlogs.service.d
             {
@@ -39,6 +73,7 @@ jobs:
             } | sudo tee /etc/systemd/system/gitlogs.service.d/deploy-path.conf >/dev/null
 
             sudo systemctl daemon-reload
+            sudo systemctl enable gitlogs
             sudo systemctl restart gitlogs
             sudo systemctl --no-pager status gitlogs | head -n 5
 
