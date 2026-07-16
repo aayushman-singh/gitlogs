@@ -399,6 +399,43 @@ async function saveTweetRecord(record) {
   return true;
 }
 
+function getRecentTweetsForUser(userId, limit = 8) {
+  if (!ensureDb()) {
+    throw new Error(`getRecentTweetsForUser: database is not ready for user ${userId}`);
+  }
+  if (!userId) {
+    throw new Error('getRecentTweetsForUser: userId is required');
+  }
+  const safeLimit = Number.parseInt(limit, 10);
+  if (!Number.isInteger(safeLimit) || safeLimit < 1 || safeLimit > 50) {
+    throw new Error(`getRecentTweetsForUser: limit must be an integer from 1 to 50, got ${limit}`);
+  }
+  return getAll(
+    `SELECT user_id, repo_name, commit_sha, tweet_id, tweet_text, status, author, created_at
+     FROM tweets
+     WHERE user_id = ?
+     ORDER BY created_at DESC
+     LIMIT ${safeLimit}`,
+    [userId]
+  );
+}
+
+function getTweetCountForUserSince(userId, sinceIso) {
+  if (!ensureDb()) {
+    throw new Error(`getTweetCountForUserSince: database is not ready for user ${userId}`);
+  }
+  if (!userId || !sinceIso) {
+    throw new Error('getTweetCountForUserSince: userId and sinceIso are required');
+  }
+  const row = getOne(
+    `SELECT COUNT(*) as count
+     FROM tweets
+     WHERE user_id = ? AND created_at >= ?`,
+    [userId, sinceIso]
+  );
+  return row?.count || 0;
+}
+
 // ============================================
 // OG Post Functions
 // ============================================
@@ -1198,6 +1235,8 @@ module.exports = {
   saveTweetId,
   saveTweetRecord,
   getTweetsForRepo,
+  getRecentTweetsForUser,
+  getTweetCountForUserSince,
   
   // OG post functions
   setOgPost,
