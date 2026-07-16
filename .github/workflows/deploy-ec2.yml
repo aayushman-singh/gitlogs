@@ -22,5 +22,37 @@ jobs:
             cd ~/gitlogs
             git pull --ff-only
             npm ci
+            test -f src/server.js
+            grep -q "/api/me/dashboard" src/server.js
+
+            DEPLOY_DIR="$(pwd -P)"
+            NODE_BIN="$(command -v node)"
+            PORT="$(grep -E '^PORT=' .env 2>/dev/null | tail -n 1 | cut -d= -f2- || true)"
+            PORT="${PORT:-3000}"
+
+            sudo mkdir -p /etc/systemd/system/gitlogs.service.d
+            {
+              echo "[Service]"
+              echo "WorkingDirectory=${DEPLOY_DIR}"
+              echo "ExecStart="
+              echo "ExecStart=${NODE_BIN} src/server.js"
+            } | sudo tee /etc/systemd/system/gitlogs.service.d/deploy-path.conf >/dev/null
+
+            sudo systemctl daemon-reload
             sudo systemctl restart gitlogs
             sudo systemctl --no-pager status gitlogs | head -n 5
+
+            for attempt in 1 2 3 4 5; do
+              status="$(curl -sS -o /tmp/gitlogs-dashboard-response.json -w "%{http_code}" "http://127.0.0.1:${PORT}/api/me/dashboard" || true)"
+              if [ "$status" = "401" ]; then
+                echo "Dashboard endpoint is present on restarted service."
+                break
+              fi
+              echo "Dashboard endpoint probe attempt ${attempt} returned HTTP ${status}:"
+              cat /tmp/gitlogs-dashboard-response.json || true
+              if [ "$attempt" = "5" ]; then
+                echo "Dashboard endpoint did not come up after restart." >&2
+                exit 1
+              fi
+              sleep 2
+            done
