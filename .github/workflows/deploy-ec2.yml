@@ -56,3 +56,12 @@ jobs:
               fi
               sleep 2
             done
+
+            echo "::group::Proxy diagnostics"
+            echo "PORT=${PORT}"
+            sudo systemctl cat gitlogs || true
+            sudo systemctl cat caddy || true
+            sudo sed -n '1,220p' /etc/caddy/Caddyfile || true
+            sudo ss -ltnp || true
+            curl -sS -i https://api-gitlogs.aayushman.dev/api/me/dashboard | sed -n '1,40p' || true
+            echo "::endgroup::"
