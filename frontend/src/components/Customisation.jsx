@@ -710,6 +710,11 @@ export default function Customisation({ user, xConnected }) {
         const userData = await getCurrentUser();
         if (userData?.xUserInfo) {
           setXUserInfo(userData.xUserInfo);
+        } else {
+          setResult({
+            type: 'error',
+            message: 'X is connected but profile details are unavailable',
+          });
         }
       } catch (err) {
         console.error('Failed to load X user info:', err);
@@ -757,7 +762,8 @@ export default function Customisation({ user, xConnected }) {
       }
       setCustomTemplates(templatesData.templates);
       setActiveTemplateId(templatesData.activeTemplateId || 'default');
-      setResult({ type: '', message: '' });
+      // Do not clear result here — loadXUserInfo / loadPostSettings run in parallel
+      // and may have already set a visible error for their own sections.
     } catch (err) {
       console.error('Failed to load templates:', err);
       setResult({ type: 'error', message: err.message || 'Failed to load templates' });

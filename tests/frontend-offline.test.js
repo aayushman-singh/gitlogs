@@ -84,6 +84,33 @@ describe('frontend offline contract', () => {
     expect(customisation).toContain("result.type !== 'error'");
   });
 
+  it('does not clear parallel customisation load errors on template success', () => {
+    const customisation = fs.readFileSync(
+      path.join(repoRoot, 'frontend', 'src', 'components', 'Customisation.jsx'),
+      'utf8'
+    );
+    const loadTemplates = customisation.match(
+      /const loadTemplates = async \(\) => \{[\s\S]*?\n  \};/
+    )?.[0];
+
+    expect(loadTemplates).toBeTruthy();
+    expect(loadTemplates).not.toContain("setResult({ type: '', message: '' })");
+  });
+
+  it('surfaces missing X profile when connected instead of staying silent', () => {
+    const customisation = fs.readFileSync(
+      path.join(repoRoot, 'frontend', 'src', 'components', 'Customisation.jsx'),
+      'utf8'
+    );
+    const loadXUserInfo = customisation.match(
+      /const loadXUserInfo = async \(\) => \{[\s\S]*?\n  \};/
+    )?.[0];
+
+    expect(loadXUserInfo).toBeTruthy();
+    expect(loadXUserInfo).toContain('userData?.xUserInfo');
+    expect(loadXUserInfo).toContain('X is connected but profile details are unavailable');
+  });
+
   it('surfaces invalid OG input through dashboard action errors instead of throwing', () => {
     const panel = fs.readFileSync(repositoryPanelPath, 'utf8');
     const dashboard = fs.readFileSync(userDashboardPath, 'utf8');
