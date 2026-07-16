@@ -160,6 +160,10 @@ export async function getCurrentUser() {
   return apiCall('/api/me');
 }
 
+export async function getMyDashboard() {
+  return apiCall('/api/me/dashboard');
+}
+
 export async function getMyRepos() {
   return apiCall('/api/me/repos');
 }

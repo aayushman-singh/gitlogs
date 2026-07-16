@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import Home from './pages/Home';
@@ -9,9 +9,12 @@ import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 
 export default function App() {
+  const location = useLocation();
+  const hideGlobalChrome = location.pathname === '/dashboard';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <Header />
+      {!hideGlobalChrome && <Header />}
       <main style={{ flex: 1 }}>
         <Routes>
           <Route path="/" element={<Home />} />
@@ -23,7 +26,7 @@ export default function App() {
           <Route path="/terms" element={<Terms />} />
         </Routes>
       </main>
-      <Footer />
+      {!hideGlobalChrome && <Footer />}
     </div>
   );
 }
