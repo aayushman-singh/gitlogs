@@ -9,6 +9,8 @@ const database = require('./database');
 const { getQueueService, shutdownQueueService } = require('./queueService');
 const githubAuth = require('./githubAuth');
 const templateEngine = require('./templateEngine');
+const { buildDashboardModel } = require('./dashboardModel');
+const twitterClient = require('./twitterClient');
 const { TEMPLATE_VARIABLES, TEMPLATE_PRESETS } = templateEngine;
 
 const app = express();
@@ -306,6 +308,14 @@ function getGithubUserIdFromCookie(req) {
   return req.cookies?.github_user_id?.toString() || null;
 }
 
+async function getXEngagementSummary() {
+  return {
+    status: 'unavailable',
+    reason: 'X engagement metrics are not implemented for the current X API client.',
+    averageHeartsPerPost: null,
+  };
+}
+
 // Get current user (based on stored GitHub token)
 app.get('/api/me', async (req, res) => {
   const githubUserId = getGithubUserIdFromCookie(req);
@@ -357,6 +367,47 @@ app.get('/api/me', async (req, res) => {
     hasRefreshToken: !!freshTokenData.refreshToken,
     xUserInfo: xUserInfo
   });
+});
+
+app.get('/api/me/dashboard', async (req, res) => {
+  const githubUserId = getGithubUserIdFromCookie(req);
+  if (!githubUserId) {
+    return res.status(401).json({
+      error: 'not_authenticated',
+      message: 'Please sign in with GitHub.',
+    });
+  }
+
+  try {
+    const model = await buildDashboardModel({
+      githubUserId,
+      deps: {
+        database,
+        githubAuth,
+        getXUserInfo: twitterClient.getXUserInfo,
+        getXEngagementSummary,
+      },
+    });
+    return res.json(model);
+  } catch (err) {
+    console.error('❌ Failed to build dashboard model:', {
+      githubUserId,
+      error: err.message,
+      stack: err.stack,
+    });
+
+    if (err.message.includes('no valid GitHub token')) {
+      return res.status(401).json({
+        error: 'token_expired',
+        message: 'Session expired. Please sign in again.',
+      });
+    }
+
+    return res.status(500).json({
+      error: 'dashboard_unavailable',
+      message: err.message,
+    });
+  }
 });
 
 // Get user's repos with OG post and enabled status
