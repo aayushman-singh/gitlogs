@@ -59,9 +59,14 @@ jobs:
 
             echo "::group::Proxy diagnostics"
             echo "PORT=${PORT}"
+            echo "remote_ipv4=$(curl -4fsS https://ifconfig.me || true)"
+            echo "api_dns=$(getent ahostsv4 api-gitlogs.aayushman.dev | awk '{print $1; exit}' || true)"
             sudo systemctl cat gitlogs || true
             sudo systemctl cat caddy || true
+            sudo systemctl cat nginx || true
             sudo sed -n '1,220p' /etc/caddy/Caddyfile || true
+            sudo find /etc/nginx -maxdepth 3 -type f \( -name '*.conf' -o -name 'sites-*' \) -print -exec sed -n '1,220p' {} \; || true
             sudo ss -ltnp || true
+            curl -sS -i -H 'Host: api-gitlogs.aayushman.dev' "http://127.0.0.1/api/me/dashboard" | sed -n '1,40p' || true
             curl -sS -i https://api-gitlogs.aayushman.dev/api/me/dashboard | sed -n '1,40p' || true
             echo "::endgroup::"
