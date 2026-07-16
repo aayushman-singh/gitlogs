@@ -35,6 +35,32 @@ jobs:
             git fetch origin main
             git checkout main
             git pull --ff-only origin main
+            cat > .env <<EOF
+            NODE_ENV=production
+            PORT=3000
+            FRONTEND_URL=https://gitlogs.aayushman.dev
+            API_BASE_URL=https://api-gitlogs.aayushman.dev
+            OAUTH_CALLBACK_URL=https://api-gitlogs.aayushman.dev/auth/x/callback
+            DATABASE_PATH=./tweets.db
+            ENABLE_THREADING=true
+            MULTI_USER_ENABLED=true
+            ALLOWED_REPOS=
+            GITHUB_CLIENT_ID=${{ secrets.GITLOGS_GITHUB_CLIENT_ID }}
+            GITHUB_CLIENT_SECRET=${{ secrets.GITLOGS_GITHUB_CLIENT_SECRET }}
+            OAUTH_CLIENT_ID=${{ secrets.GITLOGS_X_CLIENT_ID }}
+            OAUTH_CLIENT_SECRET=${{ secrets.GITLOGS_X_CLIENT_SECRET }}
+            GEMINI_API_KEY=${{ secrets.GITLOGS_GEMINI_API_KEY }}
+            GEMINI_MODEL=gemini-2.0-flash
+            WEBHOOK_SECRET=${{ secrets.GITLOGS_WEBHOOK_SECRET }}
+            ADMIN_API_KEY=${{ secrets.GITLOGS_ADMIN_API_KEY }}
+            EOF
+            sed -i 's/^            //' .env
+            for key in GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET OAUTH_CLIENT_ID OAUTH_CLIENT_SECRET GEMINI_API_KEY WEBHOOK_SECRET; do
+              if ! grep -Eq "^${key}=.+" .env; then
+                echo "Missing required GitHub Actions secret for ${key}." >&2
+                exit 1
+              fi
+            done
             npm ci
             test -f src/server.js
             grep -q "/api/me/dashboard" src/server.js
