@@ -13,7 +13,7 @@ jobs:
       - name: SSH and deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: api-gitlogs.aayushman.dev
+          host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           port: ${{ secrets.EC2_PORT || 22 }}
@@ -57,16 +57,17 @@ jobs:
               sleep 2
             done
 
-            echo "::group::Proxy diagnostics"
-            echo "PORT=${PORT}"
-            echo "remote_ipv4=$(curl -4fsS https://ifconfig.me || true)"
-            echo "api_dns=$(getent ahostsv4 api-gitlogs.aayushman.dev | awk '{print $1; exit}' || true)"
-            sudo systemctl cat gitlogs || true
-            sudo systemctl cat caddy || true
-            sudo systemctl cat nginx || true
-            sudo sed -n '1,220p' /etc/caddy/Caddyfile || true
-            sudo find /etc/nginx -maxdepth 3 -type f \( -name '*.conf' -o -name 'sites-*' \) -print -exec sed -n '1,220p' {} \; || true
-            sudo ss -ltnp || true
-            curl -sS -i -H 'Host: api-gitlogs.aayushman.dev' "http://127.0.0.1/api/me/dashboard" | sed -n '1,40p' || true
-            curl -sS -i https://api-gitlogs.aayushman.dev/api/me/dashboard | sed -n '1,40p' || true
-            echo "::endgroup::"
+            remote_ipv4="$(curl -4fsS https://ifconfig.me || true)"
+            api_dns="$(getent ahostsv4 api-gitlogs.aayushman.dev | awk '{print $1; exit}' || true)"
+            if [ -n "$remote_ipv4" ] && [ -n "$api_dns" ] && [ "$remote_ipv4" != "$api_dns" ]; then
+              echo "EC2 deploy host does not match live API DNS for api-gitlogs.aayushman.dev." >&2
+              echo "Update EC2_HOST to the live API host, or point api-gitlogs.aayushman.dev at this deploy host." >&2
+              exit 1
+            fi
+
+            public_status="$(curl -sS -o /tmp/gitlogs-public-dashboard-response.json -w "%{http_code}" https://api-gitlogs.aayushman.dev/api/me/dashboard || true)"
+            if [ "$public_status" != "401" ]; then
+              echo "Public dashboard endpoint probe returned HTTP ${public_status}:" >&2
+              cat /tmp/gitlogs-public-dashboard-response.json >&2 || true
+              exit 1
+            fi
