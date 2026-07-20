@@ -90,8 +90,10 @@ export default function UserDashboard() {
   const [activeView, setActiveView] = useState('overview');
   const [theme, setTheme] = useState(() => document.documentElement.getAttribute('data-theme') || 'dark');
 
-  const loadDashboard = async () => {
-    setLoading(true);
+  const loadDashboard = async ({ showLoading = true } = {}) => {
+    if (showLoading) {
+      setLoading(true);
+    }
     setLoadError('');
     try {
       const data = await getMyDashboard();
@@ -99,11 +101,15 @@ export default function UserDashboard() {
     } catch (error) {
       if (error.message.includes('Not authenticated') || error.message.includes('not_authenticated') || error.message.includes('Please sign in')) {
         setDashboard(null);
-      } else {
+      } else if (showLoading) {
         setLoadError(error.message);
+      } else {
+        throw error;
       }
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   };
 
@@ -128,7 +134,7 @@ export default function UserDashboard() {
     try {
       await operation();
       setActionMessage(successMessage);
-      await loadDashboard();
+      await loadDashboard({ showLoading: false });
       return true;
     } catch (error) {
       setActionError(error.message);
