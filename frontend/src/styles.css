@@ -1403,7 +1403,7 @@ code {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #3ee089, #5aa7ff);
+  object-fit: cover;
   flex: 0 0 auto;
 }
 

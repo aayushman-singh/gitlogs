@@ -193,7 +193,12 @@ export default function Home() {
             </div>
             <div className="home-tweet">
               <div className="home-tweet-head">
-                <div className="home-tweet-avatar" aria-hidden="true" />
+                <img
+                  className="home-tweet-avatar"
+                  src="/aayushman-profile.jpg"
+                  alt=""
+                  aria-hidden="true"
+                />
                 <div className="home-tweet-meta">
                   <div className="home-tweet-name">Aayushman Singh</div>
                   <div className="home-tweet-handle">@aayushman2703 · just now</div>
