@@ -13,11 +13,7 @@ export default function DashboardHeader({
 
   return (
     <header className="dashboard-shell-header">
-      <div className="dashboard-brand">
-        <img src={logo} alt="GitLogs logo" className="dashboard-logo" />
-      </div>
-
-      <div className="dashboard-header-actions">
+      <nav className="dashboard-header-tabs" aria-label="Dashboard sections">
         <button
           type="button"
           className={`dashboard-nav-button${activeView === 'overview' ? ' is-active' : ''}`}
@@ -32,9 +28,16 @@ export default function DashboardHeader({
         >
           Customisation
         </button>
+      </nav>
+
+      <div className="dashboard-brand">
+        <img src={logo} alt="GitLogs logo" className="dashboard-logo" />
+      </div>
+
+      <div className="dashboard-header-actions">
         <button
           type="button"
-          className="dashboard-icon-button dashboard-theme-toggle"
+          className="dashboard-icon-button"
           onClick={onToggleTheme}
           aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
           title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}

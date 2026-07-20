@@ -3203,6 +3203,7 @@ code {
 }
 
 .dashboard-brand,
+.dashboard-header-tabs,
 .dashboard-header-actions,
 .dashboard-user,
 .dashboard-repo-main,
@@ -3215,6 +3216,8 @@ code {
 }
 
 .dashboard-brand { gap: 12px; }
+.dashboard-header-tabs { gap: 10px; }
+.dashboard-brand { margin-left: auto; }
 .dashboard-logo {
   max-width: 104px;
   width: auto;
@@ -3231,7 +3234,6 @@ code {
 
 .dashboard-header-actions { gap: 10px; }
 .dashboard-theme-toggle {
-  margin-left: auto;
   width: 36px;
   height: 36px;
   padding: 0;
@@ -3459,7 +3461,7 @@ code {
     flex-wrap: wrap;
   }
 
-  .dashboard-theme-toggle { margin-left: auto; }
+  .dashboard-brand { margin-left: auto; }
 
   .dashboard-stats,
   .dashboard-grid {
