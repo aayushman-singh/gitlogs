@@ -195,8 +195,8 @@ export default function Home() {
               <div className="home-tweet-head">
                 <div className="home-tweet-avatar" aria-hidden="true" />
                 <div className="home-tweet-meta">
-                  <div className="home-tweet-name">octo-dev</div>
-                  <div className="home-tweet-handle">@octo_dev · just now</div>
+                  <div className="home-tweet-name">Aayushman Singh</div>
+                  <div className="home-tweet-handle">@aayushman2703 · just now</div>
                 </div>
                 <span className="home-tweet-x">
                   <XMark />
