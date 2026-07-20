@@ -1,29 +1,9 @@
 import { FaLinkedin, FaGithub } from 'react-icons/fa';
 import { FaXTwitter } from 'react-icons/fa6';
-import { useLocation, Link } from 'react-router-dom';
-import { useAuth, getGitHubAuthUrl } from '../utils/useAuth';
+import { Link } from 'react-router-dom';
 import logo from '../../gitlogs.png';
 
-const icons = {
-  branch: (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M6 3a3 3 0 100 6 3 3 0 000-6zm12 12a3 3 0 100 6 3 3 0 000-6zM6 9v3a4 4 0 004 4h4"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  ),
-};
-
 export default function Footer() {
-  const location = useLocation();
-  const isHomePage = location.pathname === '/';
-  const authState = useAuth();
-  
   const socialLinks = [
     {
       href: 'https://www.linkedin.com/in/aayushman-singh-zz/',
@@ -42,26 +22,8 @@ export default function Footer() {
     },
   ];
 
-  const handleGetStarted = () => {
-    window.location.href = getGitHubAuthUrl();
-  };
-
   return (
     <footer className="landing-footer">
-      {/* CTA Section - only show on home page and when not authenticated */}
-      {isHomePage && authState === 'unauthenticated' && (
-        <section className="landing-footer-cta">
-          <div className="landing-shell landing-footer-inner landing-animate" style={{ '--delay': '0.1s' }}>
-            <h2>Ready to automate your presence?</h2>
-            <p>Join developers who code more and post less.</p>
-            <button onClick={handleGetStarted} className="landing-button primary">
-              <span className="landing-button-icon">{icons.branch}</span>
-              Get Started Free
-            </button>
-          </div>
-        </section>
-      )}
-
       {/* Promotional Section - Connect with me */}
       <section className="landing-footer-promo">
         <div className="landing-shell landing-footer-promo-inner">
@@ -100,7 +62,7 @@ export default function Footer() {
             <a href="https://x.com/gitlogs_" rel="noreferrer" target="_blank">X</a>
           </div>
           <p>
-            © 2025 GitLogs. Built by{' '}
+            © 2026 gitlogs. Built by{' '}
             <a
               href="https://github.com/aayushman-singh"
               target="_blank"

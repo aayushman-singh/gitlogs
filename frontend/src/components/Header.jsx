@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { getCurrentUser, getBackendUrl, logout } from '../utils/api';
-import logo from '../../gitlogs.png';
 import logoIcon from '../../gitlogs-icon-whitebg.png';
 
 export default function Header() {
@@ -85,10 +84,13 @@ export default function Header() {
     <header className="header">
       <div className="header-content">
         <Link to="/" className="logo">
-          <img src={logo} alt="GitLogs logo" className="logo-mark" />
+          <img src="/logo-white-text.png" alt="Gitlogs" className="logo-wordmark" />
           <img src={logoIcon} alt="GitLogs icon" className="logo-mark logo-mark-compact" />
         </Link>
         <nav className="nav">
+          <Link to="/#how" className="nav-link nav-section-link">How it works</Link>
+          <Link to="/#personas" className="nav-link nav-section-link">Personas</Link>
+          <Link to="/#trust" className="nav-link nav-section-link">Security</Link>
           <Link to="/demo" className={isActive('/demo')}>Live Demo</Link>
           <Link to="/dashboard" className={isActive('/dashboard')}>Dashboard</Link>
 
