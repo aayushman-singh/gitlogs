@@ -51,6 +51,36 @@ function UnauthenticatedDashboardChrome({ theme, onToggleTheme, onLogin }) {
   );
 }
 
+function DashboardLoading() {
+  return (
+    <div className="dashboard-loading" role="status" aria-label="Loading dashboard">
+      <div className="dashboard-loading-header" aria-hidden="true">
+        <div className="dashboard-skeleton dashboard-skeleton-tab" />
+        <div className="dashboard-skeleton dashboard-skeleton-tab dashboard-skeleton-tab-wide" />
+        <div className="dashboard-loading-header-right">
+          <div className="dashboard-skeleton dashboard-skeleton-logo" />
+          <div className="dashboard-skeleton dashboard-skeleton-icon" />
+          <div className="dashboard-skeleton dashboard-skeleton-user" />
+        </div>
+      </div>
+      <div className="dashboard-loading-content" aria-hidden="true">
+        <div className="dashboard-loading-stats">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div className="dashboard-skeleton dashboard-skeleton-stat" key={index} />
+          ))}
+        </div>
+        <div className="dashboard-loading-grid">
+          <div className="dashboard-skeleton dashboard-skeleton-panel" />
+          <div className="dashboard-loading-rail">
+            <div className="dashboard-skeleton dashboard-skeleton-panel dashboard-skeleton-panel-short" />
+            <div className="dashboard-skeleton dashboard-skeleton-panel dashboard-skeleton-panel-short" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function UserDashboard() {
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -134,7 +164,7 @@ export default function UserDashboard() {
   if (loading) {
     return (
       <div className="dashboard-page">
-        <div className="dashboard-loading">Loading dashboard...</div>
+        <DashboardLoading />
       </div>
     );
   }

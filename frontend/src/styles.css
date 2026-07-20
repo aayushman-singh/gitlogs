@@ -3448,6 +3448,82 @@ code {
 .dashboard-alert.is-success { border-color: var(--success); }
 .dashboard-error { padding: 28px; }
 
+.dashboard-loading {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+.dashboard-loading-header {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dashboard-loading-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.dashboard-loading-content {
+  width: min(1180px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 36px 0 72px;
+}
+
+.dashboard-loading-stats,
+.dashboard-loading-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.dashboard-loading-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.dashboard-loading-grid {
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.8fr);
+  margin-top: 18px;
+}
+
+.dashboard-loading-rail { display: grid; gap: 14px; }
+.dashboard-skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+}
+
+.dashboard-skeleton::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  transform: translateX(-100%);
+  background: linear-gradient(100deg, transparent 20%, color-mix(in srgb, var(--text-primary) 8%, transparent) 50%, transparent 80%);
+  animation: dashboard-skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.dashboard-skeleton-tab { width: 78px; height: 36px; }
+.dashboard-skeleton-tab-wide { width: 112px; }
+.dashboard-skeleton-logo { width: 104px; height: 32px; }
+.dashboard-skeleton-icon { width: 36px; height: 36px; border-radius: 50%; }
+.dashboard-skeleton-user { width: 112px; height: 34px; }
+.dashboard-skeleton-stat { min-height: 118px; }
+.dashboard-skeleton-panel { min-height: 440px; }
+.dashboard-skeleton-panel-short { min-height: 212px; }
+
+@keyframes dashboard-skeleton-shimmer {
+  to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-skeleton::after { animation: none; }
+}
+
 @media (max-width: 900px) {
   .dashboard-shell-header {
     height: auto;
@@ -3464,9 +3540,15 @@ code {
   .dashboard-brand { margin-left: auto; }
 
   .dashboard-stats,
-  .dashboard-grid {
+  .dashboard-grid,
+  .dashboard-loading-stats,
+  .dashboard-loading-grid {
     grid-template-columns: 1fr;
   }
+
+  .dashboard-loading-header { padding: 14px 20px; }
+  .dashboard-loading-header-right { gap: 8px; }
+  .dashboard-skeleton-logo { width: 82px; }
 
   .dashboard-panel-heading,
   .dashboard-repo-main,
