@@ -3194,7 +3194,7 @@ code {
   height: 60px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 20px;
   padding: 0 28px;
   border-bottom: 1px solid var(--border);
@@ -3221,7 +3221,6 @@ code {
   height: 32px;
   object-fit: contain;
 }
-.dashboard-badge,
 .dashboard-repo-badges span {
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -3231,6 +3230,16 @@ code {
 }
 
 .dashboard-header-actions { gap: 10px; }
+.dashboard-theme-toggle {
+  margin-left: auto;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.dashboard-theme-toggle svg { width: 18px; height: 18px; }
 .dashboard-nav-button,
 .dashboard-icon-button,
 .dashboard-text-button,
@@ -3449,6 +3458,8 @@ code {
     width: 100%;
     flex-wrap: wrap;
   }
+
+  .dashboard-theme-toggle { margin-left: auto; }
 
   .dashboard-stats,
   .dashboard-grid {
