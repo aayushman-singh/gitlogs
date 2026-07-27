@@ -3217,13 +3217,15 @@ code {
 
 .dashboard-brand { gap: 12px; }
 .dashboard-header-tabs { gap: 10px; }
-.dashboard-brand { margin-left: auto; }
 .dashboard-logo {
   max-width: 104px;
   width: auto;
   height: 32px;
   object-fit: contain;
+  filter: invert(1);
 }
+
+[data-theme='light'] .dashboard-logo { filter: none; }
 .dashboard-repo-badges span {
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -3232,7 +3234,7 @@ code {
   font-size: 12px;
 }
 
-.dashboard-header-actions { gap: 10px; }
+.dashboard-header-actions { gap: 10px; margin-left: auto; }
 .dashboard-theme-toggle {
   width: 36px;
   height: 36px;
@@ -3241,7 +3243,7 @@ code {
   align-items: center;
   justify-content: center;
 }
-.dashboard-theme-toggle svg { width: 18px; height: 18px; }
+.dashboard-icon-button svg { width: 18px; height: 18px; }
 .dashboard-nav-button,
 .dashboard-icon-button,
 .dashboard-text-button,
@@ -3436,6 +3438,12 @@ code {
 
 .dashboard-connection-row.is-disabled { opacity: 0.64; }
 
+.dashboard-connection-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .dashboard-alert,
 .dashboard-error,
 .dashboard-loading {
@@ -3536,8 +3544,6 @@ code {
     width: 100%;
     flex-wrap: wrap;
   }
-
-  .dashboard-brand { margin-left: auto; }
 
   .dashboard-stats,
   .dashboard-grid,

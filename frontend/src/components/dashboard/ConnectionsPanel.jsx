@@ -1,4 +1,12 @@
+import { FaLinkedin, FaGithub } from 'react-icons/fa';
+import { FaXTwitter } from 'react-icons/fa6';
 import { getBackendUrl } from '../../utils/api';
+
+const PLATFORM_ICONS = {
+  github: <FaGithub size={18} aria-hidden="true" />,
+  x: <FaXTwitter size={18} aria-hidden="true" />,
+  linkedin: <FaLinkedin size={18} aria-hidden="true" />,
+};
 
 export default function ConnectionsPanel({ connections, errors = [], onDisconnectX }) {
   const xError = Array.isArray(errors)
@@ -22,7 +30,10 @@ export default function ConnectionsPanel({ connections, errors = [], onDisconnec
       <div className="dashboard-connection-list">
         <article className="dashboard-connection-row">
           <div>
-            <strong>GitHub</strong>
+            <span className="dashboard-connection-name">
+              {PLATFORM_ICONS.github}
+              <strong>GitHub</strong>
+            </span>
             <span>@{connections.github.login}</span>
           </div>
           <small>Connected</small>
@@ -30,7 +41,10 @@ export default function ConnectionsPanel({ connections, errors = [], onDisconnec
 
         <article className="dashboard-connection-row">
           <div>
-            <strong>X</strong>
+            <span className="dashboard-connection-name">
+              {PLATFORM_ICONS.x}
+              <strong>X</strong>
+            </span>
             <span>
               {connections.x.connected
                 ? (connections.x.username ? `@${connections.x.username}` : 'Connected')
@@ -46,7 +60,10 @@ export default function ConnectionsPanel({ connections, errors = [], onDisconnec
 
         <article className="dashboard-connection-row is-disabled">
           <div>
-            <strong>LinkedIn</strong>
+            <span className="dashboard-connection-name">
+              {PLATFORM_ICONS.linkedin}
+              <strong>LinkedIn</strong>
+            </span>
             <span>Coming soon</span>
           </div>
           <small>Unavailable</small>
