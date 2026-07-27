@@ -349,7 +349,7 @@ export default function Home() {
           <Link to="/dashboard" className="home-preview-link">
             <img
               src="/dashboard.png"
-              alt="gitlogs dashboard showing connected repos, post templates, and automated X posts"
+              alt="Gitlogs dashboard: Overview with repos, connections to GitHub and X, and recent posts"
             />
           </Link>
         </div>
