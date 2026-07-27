@@ -167,12 +167,11 @@ function renderXAuthPage({ title, message, detail = '', status = 'success' }) {
           <p>${message}</p>
           ${detail ? `<div class="detail">${detail}</div>` : ''}
           <div class="actions">
-            <a class="btn btn-primary" href="${FRONTEND_URL}" target="_blank" rel="noopener noreferrer">${actionLabel}</a>
-            <button class="btn btn-secondary" onclick="window.close()">Close</button>
+            <a class="btn btn-primary" href="${FRONTEND_URL}/dashboard">${actionLabel}</a>
           </div>
-          ${isSuccess ? '<div class="note">This window will close automatically in a moment.</div>' : ''}
+          ${isSuccess ? '<div class="note">Redirecting you back to your dashboard…</div>' : ''}
         </main>
-        ${isSuccess ? '<script>setTimeout(() => window.close(), 2000);</script>' : ''}
+        ${isSuccess ? `<script>window.location.replace(${JSON.stringify(FRONTEND_URL + '/dashboard')});</script>` : ''}
       </body>
     </html>
   `;
