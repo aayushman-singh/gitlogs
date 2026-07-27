@@ -3218,9 +3218,9 @@ code {
 .dashboard-brand { gap: 12px; }
 .dashboard-header-tabs { gap: 10px; }
 .dashboard-logo {
-  max-width: 104px;
+  max-width: 312px;
   width: auto;
-  height: 32px;
+  height: 96px;
   object-fit: contain;
   filter: invert(1);
 }
