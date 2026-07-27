@@ -1351,6 +1351,7 @@ module.exports = {
   getRefreshToken,
   deleteOAuthToken,
   getXOAuthUserId,
+  saveDatabase,
   
   // User management
   upsertUser,

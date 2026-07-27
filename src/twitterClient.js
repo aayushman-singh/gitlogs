@@ -96,11 +96,15 @@ function initializeTwitterClient(userId = 'default') {
   const accessToken = storedToken.access_token;
   const refreshToken = storedToken.refresh_token || null;
 
-  // Set initial token
+  // Set initial token. The stored expires_at is in SECONDS (see oauthHandler);
+  // the SDK expects expires_at in MILLISECONDS. Without it the SDK treats the
+  // token as expired and force-refreshes on every request — so any refresh
+  // hiccup fails the API call even when the access token is still valid.
   authClient.token = {
     access_token: accessToken,
     token_type: 'Bearer',
     refresh_token: refreshToken || 'dummy_refresh_token', // Placeholder if not available yet
+    ...(storedToken.expires_at ? { expires_at: storedToken.expires_at * 1000 } : {}),
   };
 
   // Override refreshAccessToken to use OAuth handler for this user
@@ -123,13 +127,18 @@ function initializeTwitterClient(userId = 'default') {
         );
       }
 
-      // Update authClient with new token
+      // Update authClient with new token. oauthHandler returns expires_at in
+      // SECONDS; convert to the MILLISECONDS value the SDK checks, otherwise
+      // the SDK keeps treating the token as expired and refreshes on every call.
       authClient.token = {
         access_token: newToken.access_token,
         token_type: newToken.token_type || 'Bearer',
         refresh_token: newToken.refresh_token,
         expires_in: newToken.expires_in,
         scope: newToken.scope,
+        expires_at: newToken.expires_at
+          ? newToken.expires_at * 1000
+          : Date.now() + (newToken.expires_in || 7200) * 1000,
       };
       
       return authClient.token;
@@ -325,7 +334,40 @@ async function verifyCredentials(userId = 'default') {
 }
 
 /**
+ * Extract a human-readable reason from an X API/SDK error.
+ * The SDK throws TwitterResponseError with { status, statusText, error } and an
+ * EMPTY message, so error.message alone hides the real cause (HTTP status and
+ * X API error detail).
+ * @param {any} error - Error thrown by the SDK or by client initialization
+ * @returns {string} - Human-readable failure reason
+ */
+function describeXApiError(error) {
+  if (!error) return 'Unknown error';
+  const parts = [];
+  if (error.status) {
+    parts.push(`HTTP ${error.status}${error.statusText ? ` ${error.statusText}` : ''}`);
+  }
+  const apiError = error.error; // Parsed response body on non-2xx responses
+  if (apiError && typeof apiError === 'object') {
+    const detail =
+      apiError.detail ||
+      apiError.title ||
+      apiError.error_description ||
+      (typeof apiError.error === 'string' ? apiError.error : null) ||
+      (Array.isArray(apiError.errors) && apiError.errors.length > 0
+        ? apiError.errors.map((entry) => entry.message || JSON.stringify(entry)).join('; ')
+        : null);
+    if (detail) parts.push(String(detail));
+  }
+  if (error.detail) parts.push(String(error.detail));
+  if (error.message) parts.push(error.message);
+  return parts.length > 0 ? parts.join(': ') : String(error);
+}
+
+/**
  * Get X user info (username, profile picture, etc.)
+ * Throws a descriptive error on failure so callers can surface the real cause;
+ * returns null only when the API responds without user data.
  * @param {string} userId - User ID to get X info for (e.g., 'github:123456')
  */
 async function getXUserInfo(userId = 'default') {
@@ -336,7 +378,7 @@ async function getXUserInfo(userId = 'default') {
     // X API v2: GET /2/users/me - Get authenticated user with profile info
     // username and name are default fields, profile_image_url needs to be requested
     const response = await twitterClient.users.findMyUser({
-      'user.fields': 'profile_image_url'
+      'user.fields': ['profile_image_url']
     });
     
     if (response.data) {
@@ -349,8 +391,12 @@ async function getXUserInfo(userId = 'default') {
     }
     return null;
   } catch (error) {
-    console.error(`❌ Failed to get X user info for user ${userId}:`, error.message || error.detail);
-    return null;
+    const reason = describeXApiError(error);
+    console.error(`❌ Failed to get X user info for user ${userId}: ${reason}`);
+    // Throw instead of silently returning null: the dashboard model and /api/me
+    // both handle rejections, and the real cause (HTTP status / X API detail)
+    // must reach them instead of a causeless "Failed to load X profile".
+    throw new Error(reason);
   }
 }
 

@@ -832,11 +832,15 @@ app.get('/auth/x/callback', async (req, res) => {
     pkceStore.delete(state);
     
     console.log(`✅ X account connected for GitHub user: ${githubUserId} (stored as: ${xOAuthUserId})`);
-    
+
+    // Persist token immediately so the dashboard request sees it even if the
+    // autosave interval hasn't fired yet (or if this is a stateless instance).
+    database.saveDatabase();
+
     res.send(renderXAuthPage({
       title: 'X connected successfully',
       message: 'Your X account is now linked to your GitLogs account.',
-      detail: 'Your X connection is personal and won\'t affect other users. You can safely close this window.',
+      detail: 'You\'ll be redirected to your dashboard in a moment.',
       status: 'success'
     }));
   } catch (error) {
