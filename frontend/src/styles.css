@@ -3191,12 +3191,13 @@ code {
   position: sticky;
   top: 0;
   z-index: 20;
-  height: 60px;
+  min-height: 60px;
+  height: auto;
   display: flex;
   align-items: center;
   justify-content: flex-start;
   gap: 20px;
-  padding: 0 28px;
+  padding: 12px 28px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--bg-primary) 92%, transparent);
   backdrop-filter: blur(18px);
