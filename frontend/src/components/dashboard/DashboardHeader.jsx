@@ -13,6 +13,10 @@ export default function DashboardHeader({
 
   return (
     <header className="dashboard-shell-header">
+      <div className="dashboard-brand">
+        <img src={logo} alt="GitLogs logo" className="dashboard-logo" />
+      </div>
+
       <nav className="dashboard-header-tabs" aria-label="Dashboard sections">
         <button
           type="button"
@@ -30,14 +34,10 @@ export default function DashboardHeader({
         </button>
       </nav>
 
-      <div className="dashboard-brand">
-        <img src={logo} alt="GitLogs logo" className="dashboard-logo" />
-      </div>
-
       <div className="dashboard-header-actions">
         <button
           type="button"
-          className="dashboard-icon-button"
+          className="dashboard-icon-button dashboard-theme-toggle"
           onClick={onToggleTheme}
           aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
           title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
