@@ -3235,10 +3235,16 @@ code {
   font-size: 12px;
 }
 
+.dashboard-header-tabs,
+.dashboard-header-actions {
+  align-items: center;
+  height: 100%;
+}
+
 .dashboard-header-actions { gap: 10px; margin-left: auto; }
 .dashboard-theme-toggle {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -3263,15 +3269,25 @@ code {
   text-decoration: none;
 }
 
+.dashboard-shell-header .dashboard-nav-button {
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .dashboard-nav-button.is-active {
   border-color: var(--accent);
   color: var(--accent);
 }
 
-.dashboard-user { gap: 10px; }
+.dashboard-user {
+  gap: 10px;
+  align-items: center;
+}
 .dashboard-user-avatar {
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
 }
 
